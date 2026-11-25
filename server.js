@@ -421,6 +421,8 @@ app.get('/api/orders', identifyCustomer, (req, res) => {
       total: order.total,
       status: order.status,
       date: order.date,
+      phone: order.phone,
+      address: order.address,
       cancelUntil: new Date(new Date(order.date).getTime() + 60 * 60 * 1000).toISOString(),
       canCancel: order.status === 'Новый' && Date.now() <= new Date(order.date).getTime() + 60 * 60 * 1000
     }))
