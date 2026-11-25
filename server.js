@@ -47,6 +47,36 @@ if (fs.existsSync(DB_FILE)) {
   save();
 }
 
+
+if (!db.demoCatalogSeeded) {
+  const cat = name => db.categories.find(c => c.name === name)?.id;
+  const demo = [
+    ["Aurelia Amber Eau de Parfum 100 мл","Тёплый янтарь, ваниль и мягкие древесные ноты. Элегантный вечерний аромат с выразительным шлейфом.",189,"Парфюм и духи",18,"https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=900&q=85"],
+    ["Rose Élégance Eau de Parfum 80 мл","Нежная роза, пион и белый мускус. Романтичный цветочный аромат на каждый день.",175,"Парфюм и духи",15,"https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=900&q=85"],
+    ["Noir Oud Intense 100 мл","Глубокий уд, шафран и благородная древесина. Насыщенная восточная композиция.",225,"Парфюм и духи",12,"https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&w=900&q=85"],
+    ["Aqua Marine Fresh 100 мл","Свежие цитрусы, морской аккорд и прохладный кедр. Универсальный аромат для активного дня.",165,"Парфюм и духи",20,"https://images.unsplash.com/photo-1590736969955-71cc94901144?auto=format&fit=crop&w=900&q=85"],
+    ["Velvet Musk Signature 90 мл","Белый мускус, ирис и сандал. Сдержанный премиальный аромат с мягким шлейфом.",199,"Парфюм и духи",14,"https://images.unsplash.com/photo-1595425970377-c9703cf48b6d?auto=format&fit=crop&w=900&q=85"],
+    ["Chrono Steel — мужские часы","Стальной корпус, лаконичный циферблат и удобный браслет. Для делового и повседневного стиля.",420,"Часы",8,"https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=85"],
+    ["Golden Classic — женские часы","Золотистый браслет и светлый циферблат. Элегантный аксессуар на каждый день и для особых случаев.",395,"Часы",7,"https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=900&q=85"],
+    ["Midnight Black Chronograph","Чёрный корпус, контрастные метки и спортивный хронограф. Выразительный городской стиль.",465,"Часы",6,"https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=900&q=85"],
+    ["Heritage Leather Watch","Классический циферблат и ремешок под кожу. Сдержанная модель к рубашке и casual-образу.",360,"Часы",9,"https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=900&q=85"],
+    ["Urban Silver Minimal","Минималистичный серебристый корпус и чистый циферблат. Универсальные часы на каждый день.",335,"Часы",10,"https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=85"],
+    ["Luna Crystal — женское кольцо","Изящное кольцо с центральным кристаллом и сияющей дорожкой. Размеры: 16–22.",245,"Кольца",10,"https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=900&q=85"],
+    ["Titan Signet — мужское кольцо","Мужской перстень с гладкой полированной площадкой и строгим силуэтом. Размеры: 18–24.",285,"Кольца",8,"https://images.unsplash.com/photo-1603561596112-0d8b7b2f3d9b?auto=format&fit=crop&w=900&q=85"],
+    ["Executive Black Leather Belt","Чёрный ремень с классической металлической пряжкой. Универсальный аксессуар к деловому гардеробу.",145,"Ремни",12,"https://images.unsplash.com/photo-1624222247344-550fb8f5f2c3?auto=format&fit=crop&w=900&q=85"],
+    ["Cognac Heritage Belt","Ремень оттенка коньяк с выразительной фактурой и тёплой металлической пряжкой.",155,"Ремни",10,"https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=900&q=85"],
+    ["Urban Matte Buckle Belt","Глубокий чёрный цвет, матовая пряжка и минималистичный дизайн.",135,"Ремни",14,"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=85"],
+    ["Classic Tan Leather Belt","Тёплый песочно-коричневый оттенок и серебристая пряжка. Практичная модель на каждый день.",139,"Ремни",11,"https://images.unsplash.com/photo-1622560480654-d96214fdc887?auto=format&fit=crop&w=900&q=85"],
+    ["Textured Black Premium Belt","Чёрный ремень с рельефной фактурой и выразительной пряжкой.",169,"Ремни",9,"https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=85"]
+  ];
+  for (const [name,desc,price,category,stock,image] of demo) {
+    db.products.push({id:nextId(),name,desc,price,stock,categoryId:cat(category),image,
+      ...(category === "Кольца" ? {sizes:name.startsWith("Luna")?["16","17","18","19","20","21","22"]:["18","19","20","21","22","23","24"]} : {})});
+  }
+  db.demoCatalogSeeded = true;
+  save();
+}
+
 function save() {
   const tempFile = DB_FILE + '.tmp';
   fs.writeFileSync(tempFile, JSON.stringify(db, null, 2));
@@ -204,6 +234,7 @@ function publicProduct(product) {
     image: product.image,
     rating,
     reviews: reviews.length,
+    sizes: product.sizes || [],
     sold: soldCount(product.id)
   };
 }
