@@ -101,6 +101,7 @@ function openOrderDetails(order){
  ${canCancel?`<div class="notice">Вы можете отменить заказ в течение 1 часа после оформления.</div><button class="secondary danger" id="cancelMyOrder" style="width:100%">Отменить заказ</button>`:order.status==='Отменён'?'<div class="notice">Заказ отменён. Товары возвращены в наличие.</div>':`<div class="notice">Отмена через магазин доступна только в течение первого часа, пока заказ имеет статус «Новый». Если нужно отменить позже, свяжитесь с магазином.</div>`}
  </div>`;
  document.body.append(modal);modal.querySelector('.close').onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove()};
+ modal.querySelectorAll('[data-order-product]').forEach(button=>button.onclick=()=>openOrderedProduct(button.dataset.orderProduct));
  const cancel=$('#cancelMyOrder',modal);if(cancel)cancel.onclick=async()=>{if(!confirm('Отменить этот заказ?'))return;cancel.disabled=true;try{await api('/api/orders/'+encodeURIComponent(order.id)+'/cancel',{method:'POST'},'customer');toast('Заказ отменён');modal.remove();loadMyOrders()}catch(e){toast(e.message);cancel.disabled=false}};
 }
 async function checkout(){
