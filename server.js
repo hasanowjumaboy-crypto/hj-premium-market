@@ -232,6 +232,7 @@ function publicProduct(product) {
     price: product.price,
     stock: product.stock,
     image: product.image,
+    photos: Array.isArray(product.photos) && product.photos.length ? product.photos : (product.image ? [product.image] : []),
     rating,
     reviews: reviews.length,
     sizes: product.sizes || [],
@@ -260,11 +261,16 @@ function readProduct(body, oldProduct = null) {
   }
 
   let image = oldProduct ? oldProduct.image : '';
-  if (data.photo) {
-    const newImage = saveImage(data.photo);
-    if (oldProduct) removeImage(oldProduct.image);
-    image = newImage;
+  let photos = Array.isArray(oldProduct?.photos) && oldProduct.photos.length
+    ? [...oldProduct.photos]
+    : (image ? [image] : []);
+  const incomingPhotos = Array.isArray(data.photos) ? data.photos : (data.photo ? [data.photo] : []);
+  for (const photoData of incomingPhotos.slice(0, 10)) {
+    const savedPhoto = saveImage(photoData);
+    photos.push(savedPhoto);
+    if (!image) image = savedPhoto;
   }
+  photos = [...new Set(photos)].slice(0, 10);
 
   return {
     name,
@@ -272,7 +278,8 @@ function readProduct(body, oldProduct = null) {
     price: Math.round(price * 100) / 100,
     stock,
     categoryId,
-    image
+    image,
+    photos
   };
 }
 
@@ -408,10 +415,37 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
 app.get('/api/orders', identifyCustomer, (req, res) => {
   const orders = db.orders
     .filter(order => order.uid === req.uid)
-    .map(({ id, items, total, status, date }) => ({ id, items, total, status, date }))
+    .map(order => ({
+      id: order.id,
+      items: order.items,
+      total: order.total,
+      status: order.status,
+      date: order.date,
+      cancelUntil: new Date(new Date(order.date).getTime() + 60 * 60 * 1000).toISOString(),
+      canCancel: order.status === 'Новый' && Date.now() <= new Date(order.date).getTime() + 60 * 60 * 1000
+    }))
     .reverse();
 
   res.json({ orders });
+});
+
+app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
+  const order = db.orders.find(item => item.id === Number(req.params.id) && item.uid === req.uid);
+  if (!order) return errorResponse(res, 'Заказ не найден', 404);
+  if (order.status === 'Отменён') return errorResponse(res, 'Заказ уже отменён');
+  const createdAt = new Date(order.date).getTime();
+  if (!Number.isFinite(createdAt) || Date.now() > createdAt + 60 * 60 * 1000) {
+    return errorResponse(res, 'Время отмены заказа (1 час) истекло');
+  }
+  if (order.status !== 'Новый') return errorResponse(res, 'Заказ уже принят в обработку. Свяжитесь с магазином для отмены');
+  for (const item of order.items) {
+    const product = db.products.find(product => product.id === item.productId);
+    if (product) product.stock += item.qty;
+  }
+  order.status = 'Отменён';
+  order.cancelledAt = new Date().toISOString();
+  save();
+  res.json({ ok: true, order });
 });
 
 app.post('/api/orders', identifyCustomer, (req, res) => {
@@ -648,7 +682,7 @@ admin.delete('/products/:id', (req, res) => {
   const product = db.products.find(item => item.id === id);
   if (!product) return errorResponse(res, 'Товар не найден', 404);
 
-  removeImage(product.image);
+  [...new Set([product.image, ...(product.photos || [])].filter(Boolean))].forEach(removeImage);
   db.products = db.products.filter(item => item.id !== id);
   db.reviews = db.reviews.filter(review => review.productId !== id);
   save();
