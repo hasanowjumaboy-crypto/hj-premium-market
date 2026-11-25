@@ -365,9 +365,12 @@ app.get('/api/profile', identifyCustomer, (req, res) => {
 app.put('/api/profile', identifyCustomer, (req, res) => {
   const body = req.body || {};
   const old = db.profiles[req.uid] || {};
+  const firstName = text(body.firstName, 40);
   const phone = text(body.phone, 20);
 
-  if (phone && !/^\+?[0-9 ()-]{7,20}$/.test(phone)) {
+  if (!firstName) return errorResponse(res, 'Укажите имя');
+  if (!phone) return errorResponse(res, 'Укажите номер телефона');
+  if (!/^\+?[0-9 ()-]{7,20}$/.test(phone)) {
     return errorResponse(res, 'Неверный номер телефона');
   }
 
@@ -382,7 +385,7 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   }
 
   db.profiles[req.uid] = {
-    firstName: text(body.firstName, 40),
+    firstName,
     lastName: text(body.lastName, 40),
     middleName: text(body.middleName, 40),
     phone,
