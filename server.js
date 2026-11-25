@@ -294,7 +294,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '7mb' }));
+app.use(express.json({ limit: '45mb' }));
 
 // Проверка состояния сервера
 app.get('/health', (req, res) => {
