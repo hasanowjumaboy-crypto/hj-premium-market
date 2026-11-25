@@ -261,16 +261,20 @@ function readProduct(body, oldProduct = null) {
   }
 
   let image = oldProduct ? oldProduct.image : '';
-  let photos = Array.isArray(oldProduct?.photos) && oldProduct.photos.length
-    ? [...oldProduct.photos]
-    : (image ? [image] : []);
+  let photos = data.replacePhotos === true
+    ? []
+    : (Array.isArray(oldProduct?.photos) && oldProduct.photos.length ? [...oldProduct.photos] : (image ? [image] : []));
   const incomingPhotos = Array.isArray(data.photos) ? data.photos : (data.photo ? [data.photo] : []);
   for (const photoData of incomingPhotos.slice(0, 10)) {
-    const savedPhoto = saveImage(photoData);
+    const value = String(photoData || '');
+    const savedPhoto = value.startsWith('/uploads/')
+      ? (/^\/uploads\/[a-f0-9]+\.(jpg|png|webp)$/.test(value) ? value : '')
+      : saveImage(value);
+    if (!savedPhoto) throw Object.assign(new Error('Некорректная фотография товара'), { status: 400 });
     photos.push(savedPhoto);
-    if (!image) image = savedPhoto;
   }
   photos = [...new Set(photos)].slice(0, 10);
+  image = photos[0] || '';
 
   return {
     name,
