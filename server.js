@@ -483,6 +483,8 @@ admin.get('/stats', (req, res) => {
 
   res.json({
     orders: db.orders.length,
+    products: db.products.length,
+    customers: new Set([...Object.keys(db.profiles), ...db.orders.map(order => order.uid)]).size,
     active: activeOrders.length,
     revenue: Math.round(activeOrders.reduce((sum, order) => sum + order.total, 0) * 100) / 100,
     items: Object.values(soldByName).reduce((sum, qty) => sum + qty, 0),
