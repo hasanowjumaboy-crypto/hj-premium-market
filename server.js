@@ -1,4 +1,5 @@
 import express from 'express';
+import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -530,6 +531,18 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
   res.json({ id: order.id, total: order.total });
 });
 
+const passkeyChallenges = new Map();
+function webauthnOrigin(req) { return `${req.protocol}://${req.get('host')}`; }
+function webauthnRpId(req) { return process.env.WEBAUTHN_RP_ID || req.hostname; }
+function rememberPasskeyChallenge(challenge, purpose) {
+  passkeyChallenges.set(challenge, { purpose, expires: Date.now() + 5 * 60 * 1000 });
+}
+function takePasskeyChallenge(challenge, purpose) {
+  const saved = passkeyChallenges.get(String(challenge || ''));
+  passkeyChallenges.delete(String(challenge || ''));
+  return saved && saved.purpose === purpose && saved.expires > Date.now() ? saved : null;
+}
+
 const loginAttempts = new Map();
 
 app.post('/api/admin/login', (req, res) => {
@@ -561,6 +574,115 @@ app.post('/api/admin/login', (req, res) => {
 
   loginAttempts.delete(ip);
   res.json({ token: makeAdminToken() });
+});
+
+app.get('/api/admin/passkey/status', (req, res) => {
+  res.json({ available: Boolean(db.adminPasskey?.id), rpId: webauthnRpId(req) });
+});
+
+app.post('/api/admin/passkey/register/options', requireAdmin, async (req, res) => {
+  try {
+    const options = await generateRegistrationOptions({
+      rpName: 'HJ PREMIUM MARKET',
+      rpID: webauthnRpId(req),
+      userID: crypto.randomBytes(16),
+      userName: 'owner',
+      userDisplayName: 'Владелец HJ PREMIUM MARKET',
+      attestationType: 'none',
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'required'
+      },
+      excludeCredentials: db.adminPasskey?.id ? [{
+        id: db.adminPasskey.id,
+        transports: db.adminPasskey.transports || []
+      }] : []
+    });
+    rememberPasskeyChallenge(options.challenge, 'register');
+    res.json(options);
+  } catch (error) {
+    console.error('Passkey registration options:', error);
+    errorResponse(res, 'Не удалось подготовить настройку биометрии', 500);
+  }
+});
+
+app.post('/api/admin/passkey/register/verify', requireAdmin, async (req, res) => {
+  try {
+    const challenge = req.body?.response?.response?.clientDataJSON
+      ? JSON.parse(Buffer.from(req.body.response.response.clientDataJSON, 'base64url').toString()).challenge
+      : '';
+    if (!takePasskeyChallenge(challenge, 'register')) return errorResponse(res, 'Время настройки истекло. Повторите попытку', 400);
+    const verification = await verifyRegistrationResponse({
+      response: req.body.response,
+      expectedChallenge: challenge,
+      expectedOrigin: webauthnOrigin(req),
+      expectedRPID: webauthnRpId(req),
+      requireUserVerification: true
+    });
+    if (!verification.verified || !verification.registrationInfo) return errorResponse(res, 'Телефон не подтвердил биометрию', 400);
+    const credential = verification.registrationInfo.credential;
+    db.adminPasskey = {
+      id: credential.id,
+      publicKey: Buffer.from(credential.publicKey).toString('base64url'),
+      counter: credential.counter,
+      transports: credential.transports || []
+    };
+    save();
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Passkey registration verification:', error);
+    errorResponse(res, 'Не удалось сохранить биометрический ключ. Попробуйте ещё раз', 400);
+  }
+});
+
+app.post('/api/admin/passkey/auth/options', async (req, res) => {
+  if (!db.adminPasskey?.id) return errorResponse(res, 'Вход по отпечатку ещё не настроен', 404);
+  try {
+    const options = await generateAuthenticationOptions({
+      rpID: webauthnRpId(req),
+      allowCredentials: [{
+        id: db.adminPasskey.id,
+        transports: db.adminPasskey.transports || []
+      }],
+      userVerification: 'required'
+    });
+    rememberPasskeyChallenge(options.challenge, 'authenticate');
+    res.json(options);
+  } catch (error) {
+    console.error('Passkey authentication options:', error);
+    errorResponse(res, 'Не удалось подготовить вход по биометрии', 500);
+  }
+});
+
+app.post('/api/admin/passkey/auth/verify', async (req, res) => {
+  try {
+    if (!db.adminPasskey?.id) return errorResponse(res, 'Вход по отпечатку ещё не настроен', 404);
+    const challenge = req.body?.response?.response?.clientDataJSON
+      ? JSON.parse(Buffer.from(req.body.response.response.clientDataJSON, 'base64url').toString()).challenge
+      : '';
+    if (!takePasskeyChallenge(challenge, 'authenticate')) return errorResponse(res, 'Время входа истекло. Попробуйте ещё раз', 400);
+    const stored = db.adminPasskey;
+    const verification = await verifyAuthenticationResponse({
+      response: req.body.response,
+      expectedChallenge: challenge,
+      expectedOrigin: webauthnOrigin(req),
+      expectedRPID: webauthnRpId(req),
+      credential: {
+        id: stored.id,
+        publicKey: Buffer.from(stored.publicKey, 'base64url'),
+        counter: stored.counter,
+        transports: stored.transports || []
+      },
+      requireUserVerification: true
+    });
+    if (!verification.verified) return errorResponse(res, 'Отпечаток не подтверждён', 401);
+    stored.counter = verification.authenticationInfo.newCounter;
+    save();
+    res.json({ token: makeAdminToken() });
+  } catch (error) {
+    console.error('Passkey authentication verification:', error);
+    errorResponse(res, 'Не удалось подтвердить вход по отпечатку', 401);
+  }
 });
 
 const admin = express.Router();
