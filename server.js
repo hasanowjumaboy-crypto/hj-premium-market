@@ -356,6 +356,8 @@ app.get('/api/profile', identifyCustomer, (req, res) => {
     lastName: text(req.telegram?.last_name, 40),
     middleName: '',
     phone: '',
+    gender: '',
+    age: '',
     address: '',
     photo: ''
   };
@@ -367,9 +369,13 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   const old = db.profiles[req.uid] || {};
   const firstName = text(body.firstName, 40);
   const phone = text(body.phone, 20);
+  const gender = text(body.gender, 20);
+  const age = Number(body.age);
 
   if (!firstName) return errorResponse(res, 'Укажите имя');
   if (!phone) return errorResponse(res, 'Укажите номер телефона');
+  if (!['Мужской', 'Женский'].includes(gender)) return errorResponse(res, 'Укажите пол');
+  if (!Number.isInteger(age) || age < 1 || age > 120) return errorResponse(res, 'Укажите корректный возраст');
   if (!/^\+?[0-9 ()-]{7,20}$/.test(phone)) {
     return errorResponse(res, 'Неверный номер телефона');
   }
@@ -389,6 +395,8 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
     lastName: text(body.lastName, 40),
     middleName: text(body.middleName, 40),
     phone,
+    gender,
+    age,
     address: text(body.address, 300),
     photo
   };
@@ -464,6 +472,8 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
     uid: req.uid,
     name: [profile.lastName, profile.firstName, profile.middleName].filter(Boolean).join(' '),
     phone: profile.phone,
+    gender: profile.gender,
+    age: profile.age,
     address: profile.address,
     items,
     total: Math.round(total * 100) / 100,
