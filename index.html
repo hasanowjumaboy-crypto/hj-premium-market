@@ -89,6 +89,7 @@ function openOrderDetails(order){
  const canCancel=order.canCancel&&order.status==='Новый';
  modal.innerHTML=`<div class="modal" style="width:min(650px,100%);max-height:92vh;overflow:auto"><div class="modalhead"><h3>Заказ №${esc(order.id)}</h3><button class="close" aria-label="Закрыть">×</button></div>
  <p><b>Статус:</b> ${esc(order.status)}</p><p class="muted">Оформлен: ${esc(date.toLocaleString('ru-RU'))}</p>
+ <div class="notice"><b>Доставка</b><br>Телефон: ${esc(order.phone||'—')}<br>Адрес: ${esc(order.address||'—')}</div>
  <h3>Состав заказа</h3>
  ${(order.items||[]).map(i=>`<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eee;align-items:center">${i.image?`<img src="${esc(i.image)}" style="width:94px;height:94px;object-fit:contain;background:#f6f6f6;border-radius:10px">`:''}<div style="flex:1"><b>${esc(i.name)}</b><p class="muted" style="margin:5px 0">Количество: ${esc(i.qty)}${i.size?' · Размер: '+esc(i.size):''}</p><b>${money(i.price)} × ${esc(i.qty)}</b></div></div>`).join('')}
  <h2 style="text-align:right">Итого: ${money(order.total)}</h2>
