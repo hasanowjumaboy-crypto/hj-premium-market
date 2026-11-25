@@ -493,6 +493,10 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
       price: product.price,
       qty,
       image: product.image,
+      photos: Array.isArray(product.photos) && product.photos.length ? product.photos : (product.image ? [product.image] : []),
+      desc: product.desc || '',
+      categoryId: product.categoryId,
+      sizes: product.sizes || [],
       ...(size ? { size } : {})
     });
     total += product.price * qty;
