@@ -496,6 +496,14 @@ admin.get('/stats', (req, res) => {
   });
 });
 
+admin.get('/products', (req, res) => {
+  res.json([...db.products].sort((a, b) => b.id - a.id).map(publicProduct));
+});
+
+admin.get('/categories', (req, res) => {
+  res.json(db.categories);
+});
+
 admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
 
 admin.put('/orders/:id', (req, res) => {
