@@ -597,6 +597,39 @@ admin.get('/categories', (req, res) => {
 
 admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
 
+// Customer directory for the owner panel. Private contact details are returned only
+// behind requireAdmin and are never exposed by the public storefront API.
+admin.get('/customers', (req, res) => {
+  const ids = new Set([
+    ...Object.keys(db.profiles),
+    ...db.orders.map(order => order.uid).filter(Boolean)
+  ]);
+  const customers = [...ids].map(uid => {
+    const profile = db.profiles[uid] || {};
+    const orders = db.orders
+      .filter(order => order.uid === uid)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latest = orders[0] || {};
+    const name = [profile.lastName, profile.firstName, profile.middleName].filter(Boolean).join(' ')
+      || latest.name || 'Покупатель';
+    return {
+      name,
+      phone: profile.phone || latest.phone || '',
+      gender: profile.gender || latest.gender || '',
+      age: profile.age || latest.age || '',
+      address: profile.address || latest.address || '',
+      orderCount: orders.length,
+      totalSpent: Math.round(orders.filter(order => order.status !== 'Отменён').reduce((sum, order) => sum + Number(order.total || 0), 0) * 100) / 100,
+      lastOrderDate: latest.date || '',
+      orders: orders.map(order => ({
+        id: order.id, total: order.total, date: order.date, status: order.status,
+        items: order.items
+      }))
+    };
+  }).sort((a, b) => new Date(b.lastOrderDate || 0) - new Date(a.lastOrderDate || 0));
+  res.json(customers);
+});
+
 admin.put('/orders/:id', (req, res) => {
   const order = db.orders.find(item => item.id === Number(req.params.id));
   if (!order) return errorResponse(res, 'Заказ не найден', 404);
