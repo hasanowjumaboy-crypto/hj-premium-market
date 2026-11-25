@@ -421,15 +421,21 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
     if (!(id > 0) || !(qty > 0) || qty > 99) {
       return errorResponse(res, 'Неверные данные корзины');
     }
-    merged.set(id, (merged.get(id) || 0) + qty);
+    const size = text(item.size, 8);
+    const previous = merged.get(id) || { qty: 0, size: '' };
+    if (previous.size && size && previous.size !== size) return errorResponse(res, 'Для одного товара оформите разные размеры отдельными заказами');
+    merged.set(id, { qty: previous.qty + qty, size: size || previous.size });
   }
 
   const items = [];
   let total = 0;
 
-  for (const [id, qty] of merged) {
+  for (const [id, selection] of merged) {
+    const qty = selection.qty;
+    const size = selection.size;
     const product = db.products.find(item => item.id === id);
     if (!product) return errorResponse(res, 'Один из товаров больше недоступен');
+    if (product.sizes?.length && !product.sizes.includes(size)) return errorResponse(res, 'Выберите размер для «' + product.name + '»');
     if (product.stock < qty) {
       return errorResponse(res, `«${product.name}»: в наличии только ${product.stock} шт.`);
     }
@@ -439,7 +445,8 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
       name: product.name,
       price: product.price,
       qty,
-      image: product.image
+      image: product.image,
+      ...(size ? { size } : {})
     });
     total += product.price * qty;
   }
