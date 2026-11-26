@@ -418,7 +418,7 @@ async function loadAdminTab(){const el=$('#adminContent');if(!el)return;try{if(s
  <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><p style="margin:5px 0"><span class="sale-badge">−${esc(p.discountPercent)}%</span></p><p style="margin:4px 0"><s>${money(p.regularPrice)}</s> → <b style="color:#d62839">${money(p.price)}</b></p><p class="muted">Остаток: ${esc(p.stock)}</p>
  <button type="button" class="secondary" data-manage-discount="${esc(p.id)}" style="width:100%;margin-top:5px">Изменить или отменить скидку</button></div></div>`).join(''):'<div class="empty">Пока нет товаров со скидкой</div>'}`;
  $('#addProductDiscount',el).onclick=()=>{state.adminTab='products';renderAdmin()};
- $('[data-manage-discount]',el).forEach(b=>b.onclick=()=>openAdminDiscount(products.find(p=>String(p.id)===b.dataset.manageDiscount)));
+ $$('[data-manage-discount]',el).forEach(b=>b.onclick=()=>openAdminDiscount(products.find(p=>String(p.id)===b.dataset.manageDiscount)));
 }else if(state.adminTab==='products'){
  const [pd,cd]=await Promise.all([adminApi('/products'),adminApi('/categories')]);
  const products=Array.isArray(pd)?pd:(pd.products||[]);
