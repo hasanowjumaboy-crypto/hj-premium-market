@@ -440,7 +440,7 @@ app.get('/api/chat', identifyChatCustomer, (req, res) => {
     });
     save();
   }
-  res.json({ messages: chat?.messages || [], subject: chat?.subject || '' });
+  res.json({ messages: (chat?.messages || []).filter(m => !(m.hiddenFor || []).includes('customer')), subject: chat?.subject || '' });
 });
 app.post('/api/chat', identifyChatCustomer, (req, res) => {
   const body = req.body || {}; const messageText = text(body.text, 2000);
@@ -452,6 +452,9 @@ app.post('/api/chat', identifyChatCustomer, (req, res) => {
   chat.messages = Array.isArray(chat.messages) ? chat.messages : []; chat.messages.push(message); chat.lastMessage = message.date; chat.lastText = messageText || 'Фото';
   save(); res.json({ ok: true, message, subject: chat.subject });
 });
+
+app.patch('/api/chat/:messageId',identifyChatCustomer,(req,res)=>{const chat=db.messages.find(x=>x.uid===req.uid),m=chat?.messages?.find(x=>String(x.id)===String(req.params.messageId));if(!m)return errorResponse(res,'Сообщение не найдено',404);if(m.sender!=='customer')return errorResponse(res,'Можно редактировать только своё сообщение',403);if(m.deletedForEveryone)return errorResponse(res,'Сообщение уже удалено');const value=text(req.body?.text,2000);if(!value&&!m.image)return errorResponse(res,'Сообщение не может быть пустым');m.text=value;m.editedAt=new Date().toISOString();save();res.json({ok:true,message:m});});
+app.delete('/api/chat/:messageId',identifyChatCustomer,(req,res)=>{const chat=db.messages.find(x=>x.uid===req.uid),m=chat?.messages?.find(x=>String(x.id)===String(req.params.messageId));if(!m)return errorResponse(res,'Сообщение не найдено',404);if(m.sender!=='customer')return errorResponse(res,'Можно удалять только своё сообщение',403);if(req.body?.forEveryone===true){if(m.image)removeImage(m.image);m.image='';m.text='';m.deletedForEveryone=true;m.deletedAt=new Date().toISOString();}else{m.hiddenFor=Array.isArray(m.hiddenFor)?m.hiddenFor:[];if(!m.hiddenFor.includes('customer'))m.hiddenFor.push('customer');}save();res.json({ok:true});});
 
 app.get('/api/orders', identifyCustomer, (req, res) => {
   const orders = db.orders
@@ -805,8 +808,11 @@ admin.get('/messages/:uid', (req, res) => {
  const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
  const profile=db.profiles[uid]||{}; const orders=db.orders.filter(order=>order.uid===uid).sort((a,b)=>new Date(b.date)-new Date(a.date));
  (chat.messages||[]).forEach(m=>{if(m.sender==='customer')m.readByAdmin=true;}); save();
- res.json({uid,subject:chat.subject||'Общий вопрос',profile:{firstName:profile.firstName||'',lastName:profile.lastName||'',middleName:profile.middleName||'',phone:profile.phone||orders[0]?.phone||'',gender:profile.gender||orders[0]?.gender||'',age:profile.age||orders[0]?.age||'',address:profile.address||orders[0]?.address||'',photo:profile.photo||''},orders:orders.map(o=>({id:o.id,status:o.status,total:o.total,date:o.date})),messages:chat.messages||[]});
+ res.json({uid,subject:chat.subject||'Общий вопрос',profile:{firstName:profile.firstName||'',lastName:profile.lastName||'',middleName:profile.middleName||'',phone:profile.phone||orders[0]?.phone||'',gender:profile.gender||orders[0]?.gender||'',age:profile.age||orders[0]?.age||'',address:profile.address||orders[0]?.address||'',photo:profile.photo||''},orders:orders.map(o=>({id:o.id,status:o.status,total:o.total,date:o.date})),messages:(chat.messages||[]).filter(m=>!(m.hiddenFor||[]).includes('admin'))});
 });
+admin.put('/messages/:uid/:messageId',(req,res)=>{const c=db.messages.find(x=>x.uid===String(req.params.uid||'')),m=c?.messages?.find(x=>String(x.id)===String(req.params.messageId));if(!m)return errorResponse(res,'Сообщение не найдено',404);if(m.sender!=='admin')return errorResponse(res,'Можно редактировать только своё сообщение',403);if(m.deletedForEveryone)return errorResponse(res,'Сообщение уже удалено');const value=text(req.body?.text,2000);if(!value&&!m.image)return errorResponse(res,'Сообщение не может быть пустым');m.text=value;m.editedAt=new Date().toISOString();save();res.json({ok:true,message:m});});
+admin.delete('/messages/:uid/:messageId',(req,res)=>{const c=db.messages.find(x=>x.uid===String(req.params.uid||'')),m=c?.messages?.find(x=>String(x.id)===String(req.params.messageId));if(!m)return errorResponse(res,'Сообщение не найдено',404);if(m.sender!=='admin')return errorResponse(res,'Можно удалять только своё сообщение',403);if(req.body?.forEveryone===true){if(m.image)removeImage(m.image);m.image='';m.text='';m.deletedForEveryone=true;m.deletedAt=new Date().toISOString();}else{m.hiddenFor=Array.isArray(m.hiddenFor)?m.hiddenFor:[];if(!m.hiddenFor.includes('admin'))m.hiddenFor.push('admin');}save();res.json({ok:true});});
+
 admin.post('/messages/:uid', (req, res) => {
  const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
  const messageText=text(req.body?.text,2000); let image=''; if(req.body?.image)image=saveImage(req.body.image);
