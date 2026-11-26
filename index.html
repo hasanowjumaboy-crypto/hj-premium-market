@@ -110,14 +110,14 @@ async function sendCustomerChat(e){
  e.preventDefault();const form=e.target;if(!form||form.id!=='customerChatForm')return;const button=form.querySelector('button[type="submit"],button:not([type])');if(!button)return;
  button.disabled=true;const original=button.textContent;button.textContent='Отправка…';
  try{
-  const fd=new FormData(form),files=Array.from(form.querySelector('#customerChatImage')?.files||[]);
-  const messageText=String(fd.get('text')||'').trim();if(!messageText&&!files.length)throw Error('Напишите сообщение или прикрепите фото');
+  const textField=form.querySelector('textarea[name="text"]'),subjectField=form.querySelector('select[name="subject"]'),files=Array.from(form.querySelector('#customerChatImage')?.files||[]);
+  const messageText=String(textField?.value||'').trim(),subject=String(subjectField?.value||'Общий вопрос');if(!messageText&&!files.length)throw Error('Напишите сообщение или прикрепите фото');
   if(files.length>10)throw Error('Можно прикрепить не более 10 фото за раз');
-  if(!files.length){await api('/api/chat',{method:'POST',body:JSON.stringify({text:messageText,subject:String(fd.get('subject')||'Общий вопрос')})},'customer')}
+  if(!files.length){await api('/api/chat',{method:'POST',body:JSON.stringify({text:messageText,subject})},'customer')}
   else{
    for(let i=0;i<files.length;i++){
     const image=await chatPhotoToData(files[i]);
-    await api('/api/chat',{method:'POST',body:JSON.stringify({text:i===0?messageText:'',image,subject:String(fd.get('subject')||'Общий вопрос')})},'customer');
+    await api('/api/chat',{method:'POST',body:JSON.stringify({text:i===0?messageText:'',image,subject})},'customer');
    }
   }
   form.elements.namedItem('text').value='';form.querySelector('#customerChatImage').value='';
