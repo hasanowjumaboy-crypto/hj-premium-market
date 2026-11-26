@@ -121,7 +121,7 @@ async function sendCustomerChat(e){
    }
   }
   form.elements.namedItem('text').value='';form.querySelector('#customerChatImage').value='';
-  const photoName=$('#customerChatPhotoName');if(photoName)photoName.textContent='';const subject=form.elements.namedItem('subject');if(subject)subject.disabled=true;
+  const photoName=$('#customerChatPhotoName');if(photoName)photoName.textContent='';const subjectSelect=form.elements.namedItem('subject');if(subjectSelect)subjectSelect.disabled=true;
   toast('Сообщение отправлено');await loadCustomerChat();
  }catch(err){toast('Не удалось отправить: '+(err.message||'Проверьте интернет и попробуйте ещё раз'))}
  finally{button.disabled=false;button.textContent=original}
