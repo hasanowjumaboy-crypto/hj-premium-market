@@ -435,7 +435,7 @@ app.get('/api/config', (req, res) => {
 app.get('/api/categories', (req, res) => res.json(db.categories));
 
 app.get('/api/products', (req, res) => {
-  res.json([...db.products].sort((a, b) => b.id - a.id).map(publicProduct));
+  res.json([...db.products].filter(product => product.published !== false).sort((a, b) => b.id - a.id).map(publicProduct));
 });
 
 app.get('/api/products/:id/reviews', (req, res) => {
@@ -1149,6 +1149,302 @@ app.get('/api/bot/overview', requireBotApi, (req, res) => {
 const admin = express.Router();
 admin.use(requireAdmin);
 
+
+// Gemini-powered owner agent. Only authenticated admin sessions can call it.
+const AI_AGENT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const AI_AGENT_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash-lite';
+
+function aiAgentSnapshot() {
+  const activeOrders = db.orders.filter(order => order.status !== 'Отменён');
+  const products = db.products.map(p => ({
+    id: p.id, name: p.name, description: p.desc || '', price: p.price,
+    regularPrice: p.discountPercent ? Number(p.regularPrice) : null,
+    discountPercent: Number(p.discountPercent) || 0,
+    discountReason: p.discountReason || '', stock: p.stock,
+    category: db.categories.find(c => c.id === p.categoryId)?.name || '',
+    published: p.published !== false,
+    sold: soldCount(p.id)
+  }));
+  const orders = [...db.orders].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,100).map(o=>({
+    id:o.id,status:o.status,total:o.total,date:o.date,
+    items:(o.items||[]).map(i=>({name:i.name,qty:i.qty,price:i.price}))
+  }));
+  return {
+    currency:CURRENCY,
+    overview:{
+      products:products.length,published:products.filter(p=>p.published).length,
+      hidden:products.filter(p=>!p.published).length,
+      categories:db.categories.length,orders:db.orders.length,
+      activeOrders:activeOrders.length,cancelledOrders:db.orders.length-activeOrders.length,
+      revenue:Math.round(activeOrders.reduce((sum,o)=>sum+Number(o.total||0),0)*100)/100,
+      soldUnits:products.reduce((sum,p)=>sum+Number(p.sold||0),0),
+      discountedProducts:products.filter(p=>p.discountPercent>0).length,
+      lowStockProducts:products.filter(p=>p.stock>0&&p.stock<=3).length,
+      outOfStockProducts:products.filter(p=>p.stock<=0).length
+    },
+    categories:db.categories.map(c=>({id:c.id,name:c.name})),
+    products,
+    orders,
+    statuses:STATUSES
+  };
+}
+
+async function askGeminiForShopPlan(message, snapshot) {
+  const apiKey=process.env.GEMINI_API_KEY;
+  if(!apiKey) throw Object.assign(new Error('Для AI-помощника магазина не задан GEMINI_API_KEY. Добавьте ключ Gemini в переменные Railway сервиса HJ PREMIUM MARKET.'),{status:503});
+  const system = [
+    'Ты — встроенный AI-агент магазина HJ PREMIUM MARKET. Ты работаешь только для владельца магазина.',
+    'Понимай естественный русский и таджикский язык, разговорные формулировки, опечатки и контекст.',
+    'Используй только факты из актуального снимка магазина. Не выдумывай товары, цены, категории, остатки, статусы и результаты.',
+    'Верни только JSON: {"message":"короткий ответ или уточнение","actions":[...]}',
+    'Для чтения данных actions должен быть пустым, а message — содержать ответ на вопрос.',
+    'Если не хватает данных или есть несколько совпадений, задай один уточняющий вопрос, actions=[] и ничего не меняй.',
+    'Для изменений формируй последовательный массив actions. Не выдумывай id: используй точные id из снимка либо productName/categoryName.',
+    'Действия: create_product {name,description,price,stock,categoryName}; update_product {productId или productName, fields:{name,description,price,stock,categoryName}}; delete_product {productId или productName}; set_discount {productId или productName,percent,reason}; disable_discount {productId или productName}; publish_product {productId или productName}; unpublish_product {productId или productName}; create_category {name}; rename_category {categoryId или categoryName,name}; delete_category {categoryId или categoryName}; update_order_status {orderId,status}; delete_cancelled_order {orderId}.',
+    'Для нового товара обязательны name, price, stock, categoryName. Если данных нет — спроси. Фото не придумывай и не создавай URL: если фото требуется, попроси владельца загрузить его отдельно.',
+    'Новые товары публикуются сразу, если владелец не просит создать скрытый черновик. Для скрытого черновика добавь create_product и затем unpublish_product.',
+    'Удаление товара и категории, отмена/удаление заказа, изменения цен, скидок и остатков — только через actions, они будут показаны владельцу до подтверждения.',
+    'Не утверждай, что действие уже выполнено. На этом этапе только составь план.',
+    'Максимум 10 действий за один запрос. Для неподдерживаемой задачи объясни ограничение в message и верни actions=[].'
+  ].join('\n');
+  const contents=JSON.stringify({message,snapshot});
+  let lastError=null;
+  for(const model of [...new Set([AI_AGENT_MODEL,AI_AGENT_FALLBACK_MODEL])]) {
+    try {
+      const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(apiKey),{
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          systemInstruction:{parts:[{text:system}]},
+          contents:[{role:'user',parts:[{text:contents}]}],
+          generationConfig:{temperature:0.1,responseMimeType:'application/json',maxOutputTokens:3000}
+        }),
+        signal:AbortSignal.timeout(45000)
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error('Gemini API вернул ошибку '+response.status+': '+text(data.error?.message||'проверьте модель и API key',220));
+      const raw=(data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+      const parsed=JSON.parse(raw);
+      if(!parsed||typeof parsed.message!=='string'||!Array.isArray(parsed.actions)) throw new Error('Gemini вернул неверный формат плана');
+      if(parsed.actions.length>10) throw new Error('Слишком много действий в одном плане');
+      return {message:text(parsed.message,3000),actions:parsed.actions};
+    } catch(error) { lastError=error; }
+  }
+  throw Object.assign(new Error(lastError?.message||'Не удалось получить ответ Gemini'),{status:502});
+}
+
+function aiFindProduct(action) {
+  if(action.productId!==undefined) {
+    const p=db.products.find(x=>x.id===Number(action.productId));
+    if(!p) throw new Error('Товар с ID '+action.productId+' не найден');
+    return p;
+  }
+  const name=text(action.productName||action.name,120).toLocaleLowerCase('ru');
+  if(!name) throw new Error('Не указано название товара');
+  const matches=db.products.filter(p=>p.name.toLocaleLowerCase('ru')===name);
+  if(matches.length===1)return matches[0];
+  const partial=db.products.filter(p=>p.name.toLocaleLowerCase('ru').includes(name)||name.includes(p.name.toLocaleLowerCase('ru')));
+  if(partial.length===1)return partial[0];
+  if(partial.length>1)throw new Error('Найдено несколько похожих товаров: '+partial.map(p=>p.name+' (ID '+p.id+')').join('; '));
+  throw new Error('Товар «'+name+'» не найден');
+}
+function aiFindCategory(action) {
+  if(action.categoryId!==undefined) {
+    const c=db.categories.find(x=>x.id===Number(action.categoryId));
+    if(!c)throw new Error('Категория не найдена');
+    return c;
+  }
+  const name=text(action.categoryName||action.name,40).toLocaleLowerCase('ru');
+  const matches=db.categories.filter(c=>c.name.toLocaleLowerCase('ru')===name);
+  if(matches.length===1)return matches[0];
+  throw new Error(name?'Категория «'+name+'» не найдена или неоднозначна':'Не указана категория');
+}
+function aiNormalizeAction(raw) {
+  if(!raw||typeof raw!=='object'||typeof raw.type!=='string')throw new Error('Gemini сформировал некорректное действие');
+  const a={...raw};
+  if(['update_product','delete_product','set_discount','disable_discount','publish_product','unpublish_product'].includes(a.type)) {
+    const p=aiFindProduct(a); a.productId=p.id;
+    if(a.type==='update_product') {
+      const f=a.fields||{};
+      const fields={};
+      for(const key of ['name','description','price','stock']) if(f[key]!==undefined) fields[key]=f[key];
+      if(f.categoryName!==undefined||f.categoryId!==undefined) fields.categoryId=aiFindCategory({categoryName:f.categoryName,categoryId:f.categoryId}).id;
+      if(!Object.keys(fields).length)throw new Error('Не указано, какие поля товара изменить');
+      a.fields=fields;
+    }
+    if(a.type==='set_discount') {
+      const percent=Number(a.percent);
+      if(!Number.isInteger(percent)||percent<1||percent>90)throw new Error('Скидка должна быть от 1 до 90 процентов');
+      a.percent=percent;
+      a.reason=text(a.reason,100);
+    }
+  }
+  if(a.type==='create_product') {
+    a.name=text(a.name,100); a.description=text(a.description,500);
+    a.price=Number(a.price); a.stock=Number(a.stock);
+    if(!a.name||!Number.isFinite(a.price)||a.price<0||!Number.isInteger(a.stock)||a.stock<0)throw new Error('Для нового товара нужны корректные название, цена и остаток');
+    a.categoryId=aiFindCategory({categoryName:a.categoryName}).id;
+  }
+  if(a.type==='create_category') {
+    a.name=text(a.name,40); if(!a.name)throw new Error('Не указано название новой категории');
+    if(db.categories.some(c=>c.name.toLocaleLowerCase('ru')===a.name.toLocaleLowerCase('ru')))throw new Error('Такая категория уже существует');
+  }
+  if(a.type==='rename_category'||a.type==='delete_category') a.categoryId=aiFindCategory(a).id;
+  if(a.type==='rename_category') {a.name=text(a.name,40);if(!a.name)throw new Error('Новое название категории не указано');}
+  if(a.type==='update_order_status'||a.type==='delete_cancelled_order') {
+    a.orderId=Number(a.orderId);
+    a.order=db.orders.find(o=>o.id===a.orderId);
+    if(!a.order)throw new Error('Заказ №'+a.orderId+' не найден');
+    if(a.type==='update_order_status'&&!STATUSES.includes(a.status))throw new Error('Неизвестный статус заказа. Доступно: '+STATUSES.join(', '));
+    if(a.type==='delete_cancelled_order'&&a.order.status!=='Отменён')throw new Error('Удалять можно только отменённые заказы');
+    delete a.order;
+  }
+  const supported=['create_product','update_product','delete_product','set_discount','disable_discount','publish_product','unpublish_product','create_category','rename_category','delete_category','update_order_status','delete_cancelled_order'];
+  if(!supported.includes(a.type))throw new Error('Операция пока не подключена: '+a.type);
+  return a;
+}
+function aiDescribeAction(a) {
+  const p=a.productId?db.products.find(x=>x.id===a.productId):null;
+  const c=a.categoryId?db.categories.find(x=>x.id===a.categoryId):null;
+  if(a.type==='create_product')return 'Добавить товар «'+a.name+'», цена '+a.price+' '+CURRENCY+', остаток '+a.stock+', категория «'+db.categories.find(x=>x.id===a.categoryId)?.name+'» (будет опубликован)';
+  if(a.type==='update_product')return 'Изменить карточку «'+p?.name+'»: '+Object.entries(a.fields).map(([k,v])=>({name:'название',description:'описание',price:'цена',stock:'остаток',categoryId:'категория'}[k]||k)+' → '+(k==='categoryId'?db.categories.find(x=>x.id===v)?.name:v)).join('; ');
+  if(a.type==='delete_product')return 'Удалить товар «'+p?.name+'» (ID '+a.productId+') и его отзывы';
+  if(a.type==='set_discount')return 'Установить скидку '+a.percent+'% на «'+p?.name+'»'+(a.reason?' ('+a.reason+')':'');
+  if(a.type==='disable_discount')return 'Отключить скидку на «'+p?.name+'»';
+  if(a.type==='publish_product')return 'Опубликовать товар «'+p?.name+'»';
+  if(a.type==='unpublish_product')return 'Скрыть товар «'+p?.name+'» из витрины';
+  if(a.type==='create_category')return 'Создать категорию «'+a.name+'»';
+  if(a.type==='rename_category')return 'Переименовать категорию «'+c?.name+'» в «'+a.name+'»';
+  if(a.type==='delete_category')return 'Удалить категорию «'+c?.name+'» (только если в ней нет товаров)';
+  if(a.type==='update_order_status')return 'Изменить статус заказа №'+a.orderId+' на «'+a.status+'»';
+  if(a.type==='delete_cancelled_order')return 'Удалить отменённый заказ №'+a.orderId;
+  return a.type;
+}
+function aiActionSnapshot(a) {
+  if(a.productId){const p=db.products.find(x=>x.id===a.productId);return {type:a.type,id:p?.id,name:p?.name,price:p?.price,stock:p?.stock,categoryId:p?.categoryId,discountPercent:p?.discountPercent,regularPrice:p?.regularPrice,published:p?.published};}
+  if(a.categoryId){const c=db.categories.find(x=>x.id===a.categoryId);return {type:a.type,id:c?.id,name:c?.name,productIds:db.products.filter(p=>p.categoryId===c?.id).map(p=>p.id)};}
+  if(a.orderId){const o=db.orders.find(x=>x.id===a.orderId);return {type:a.type,id:o?.id,status:o?.status,items:(o?.items||[]).map(i=>({productId:i.productId,qty:i.qty})),stocks:(o?.items||[]).map(i=>({id:i.productId,stock:db.products.find(p=>p.id===i.productId)?.stock}))};}
+  if(a.type==='create_product')return {type:a.type,name:a.name,price:a.price,stock:a.stock,categoryId:a.categoryId};
+  if(a.type==='create_category')return {type:a.type,name:a.name};
+  return {type:a.type};
+}
+function aiCheckSnapshot(expected,a) {
+  const current=aiActionSnapshot(a);
+  return JSON.stringify(current)===JSON.stringify(expected);
+}
+function aiApplyAction(a) {
+  if(a.type==='create_product') {
+    const p={id:nextId(),published:true,...readProduct({name:a.name,desc:a.description,price:a.price,stock:a.stock,categoryId:a.categoryId})};
+    db.products.push(p);return 'Добавлен товар «'+p.name+'» (ID '+p.id+')';
+  }
+  if(a.type==='update_product') {
+    const p=db.products.find(x=>x.id===a.productId);
+    const fields={...a.fields};
+    if(fields.categoryId===undefined)fields.categoryId=p.categoryId;
+    Object.assign(p,readProduct({...p,...fields,desc:fields.description??p.desc,categoryId:fields.categoryId},p));
+    if(fields.price!==undefined){delete p.regularPrice;delete p.discountPercent;delete p.discountReason;}
+    return 'Обновлён товар «'+p.name+'»';
+  }
+  if(a.type==='delete_product') {
+    const p=db.products.find(x=>x.id===a.productId);
+    [...new Set([p.image,...(p.photos||[])].filter(Boolean))].forEach(removeImage);
+    db.products=db.products.filter(x=>x.id!==p.id);db.reviews=db.reviews.filter(x=>x.productId!==p.id);
+    return 'Удалён товар «'+p.name+'»';
+  }
+  if(a.type==='set_discount') {
+    const p=db.products.find(x=>x.id===a.productId);
+    const regular=Number(p.regularPrice??p.price);
+    p.regularPrice=regular;p.discountPercent=a.percent;p.price=Math.round(regular*(1-a.percent/100)*100)/100;
+    p.discountReason=a.reason;return 'Скидка '+a.percent+'% установлена на «'+p.name+'»';
+  }
+  if(a.type==='disable_discount') {
+    const p=db.products.find(x=>x.id===a.productId);
+    if(p.regularPrice!==undefined)p.price=Number(p.regularPrice);
+    delete p.regularPrice;delete p.discountPercent;delete p.discountReason;
+    return 'Скидка отключена на «'+p.name+'»';
+  }
+  if(a.type==='publish_product'||a.type==='unpublish_product') {
+    const p=db.products.find(x=>x.id===a.productId);p.published=a.type==='publish_product';
+    return (p.published?'Опубликован':'Скрыт')+' товар «'+p.name+'»';
+  }
+  if(a.type==='create_category') {
+    const c={id:nextId(),name:a.name};db.categories.push(c);return 'Создана категория «'+c.name+'»';
+  }
+  if(a.type==='rename_category') {
+    const c=db.categories.find(x=>x.id===a.categoryId);c.name=a.name;return 'Категория переименована в «'+c.name+'»';
+  }
+  if(a.type==='delete_category') {
+    const c=db.categories.find(x=>x.id===a.categoryId);
+    if(db.products.some(p=>p.categoryId===c.id))throw new Error('В категории появились товары — удаление остановлено');
+    db.categories=db.categories.filter(x=>x.id!==c.id);return 'Удалена категория «'+c.name+'»';
+  }
+  if(a.type==='update_order_status') {
+    const o=db.orders.find(x=>x.id===a.orderId),was=o.status==='Отменён',will=a.status==='Отменён';
+    if(will&&!was) {
+      const restore=!['Отправлен','В пути','Доставлен'].includes(o.status);
+      if(restore)for(const item of o.items||[]){const p=db.products.find(x=>x.id===item.productId);if(p)p.stock+=Number(item.qty||0);}
+      o.stockRestoredOnCancel=restore;
+    }
+    if(was&&!will&&o.stockRestoredOnCancel!==false) {
+      const needed=(o.items||[]).map(i=>[db.products.find(p=>p.id===i.productId),Number(i.qty||0)]);
+      if(needed.some(([p,q])=>!p||p.stock<q))throw new Error('Недостаточно остатков для возврата заказа в работу');
+      needed.forEach(([p,q])=>p.stock-=q);o.stockRestoredOnCancel=false;
+    }
+    o.status=a.status;
+    if(will){o.cancelReason='Изменено владельцем через AI';o.cancelledAt=o.cancelledAt||new Date().toISOString();o.cancelledBy='Администратор';}
+    else{o.cancelReason='';o.cancelledAt='';o.cancelledBy='';}
+    return 'Заказ №'+o.id+': статус «'+o.status+'»';
+  }
+  if(a.type==='delete_cancelled_order') {
+    const o=db.orders.find(x=>x.id===a.orderId);
+    if(o.status!=='Отменён')throw new Error('Заказ уже не отменён — удаление остановлено');
+    db.orders=db.orders.filter(x=>x.id!==o.id);return 'Удалён отменённый заказ №'+o.id;
+  }
+  throw new Error('Неизвестное действие');
+}
+function cleanAiPending() {
+  db.aiPending=Array.isArray(db.aiPending)?db.aiPending:[];
+  db.aiPending=db.aiPending.filter(x=>!x.usedAt&&x.expiresAt>Date.now());
+}
+admin.post('/ai', async (req,res) => {
+  try {
+    const message=text(req.body?.message,2000);
+    if(!message)return errorResponse(res,'Напишите, что нужно сделать или узнать');
+    if(!process.env.GEMINI_API_KEY)return errorResponse(res,'Gemini ещё не подключён: добавьте GEMINI_API_KEY в переменные Railway сервиса HJ PREMIUM MARKET',503);
+    const snapshot=aiAgentSnapshot();
+    const plan=await askGeminiForShopPlan(message,snapshot);
+    if(!plan.actions.length)return res.json({ok:true,message:plan.message||'Готово, вот что удалось выяснить по данным магазина.',actions:[],snapshot:snapshot.overview});
+    const actions=plan.actions.map(aiNormalizeAction);
+    const previews=actions.map((a,index)=>({number:index+1,description:aiDescribeAction(a),snapshot:aiActionSnapshot(a)}));
+    const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+    const pendingId=crypto.randomBytes(16).toString('hex');
+    const owner='admin-session';
+    const codeHash=crypto.createHmac('sha256',SECRET).update(owner+':'+pendingId+':'+code).digest('hex');
+    cleanAiPending();
+    db.aiPending.push({id:pendingId,owner,actions,previews,codeHash,createdAt:Date.now(),expiresAt:Date.now()+5*60*1000,attempts:0});
+    db.aiPending=db.aiPending.slice(-10);save();
+    res.json({ok:true,message:plan.message||'Я подготовил план. Проверь каждое действие.',requiresConfirmation:true,preview:previews,code,expiresInSeconds:300});
+  } catch(error) { errorResponse(res,error.message||'AI agent error',error.status||400); }
+});
+admin.post('/ai/confirm', (req,res) => {
+  cleanAiPending();
+  const pending=[...db.aiPending].reverse().find(x=>x.owner==='admin-session'&&!x.usedAt);
+  if(!pending)return errorResponse(res,'Подтверждение не найдено или срок истёк',404);
+  const code=String(req.body?.code||'');
+  const expected=Buffer.from(pending.codeHash);
+  const supplied=Buffer.from(crypto.createHmac('sha256',SECRET).update('admin-session:'+pending.id+':'+code).digest('hex'));
+  if(!/^\d{6}$/.test(code)||supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected)) {
+    pending.attempts=(pending.attempts||0)+1;if(pending.attempts>=5)pending.usedAt=Date.now();save();
+    return errorResponse(res,'Неверный код. Осталось попыток: '+Math.max(0,5-pending.attempts),401);
+  }
+  try {
+    for(let i=0;i<pending.actions.length;i++) {
+      if(!aiCheckSnapshot(pending.previews[i].snapshot,pending.actions[i]))throw new Error('Данные магазина изменились после предварительного просмотра. Подготовьте команду заново.');
+    }
+    const results=pending.actions.map(aiApplyAction);
+    pending.usedAt=Date.now();save();
+    res.json({ok:true,message:'Выполнено и сохранено: '+results.join('; '),results});
+  } catch(error) { errorResponse(res,error.message||'Не удалось выполнить план',409); }
+});
 admin.get('/stats', (req, res) => {
   const activeOrders = db.orders.filter(order => order.status !== 'Отменён');
   const sales = new Map();
@@ -1206,7 +1502,7 @@ admin.get('/stats', (req, res) => {
 });
 
 admin.get('/products', (req, res) => {
-  res.json([...db.products].sort((a, b) => b.id - a.id).map(publicProduct));
+  res.json([...db.products].sort((a, b) => b.id - a.id).map(product => ({...publicProduct(product), published: product.published !== false})));
 });
 
 admin.get('/categories', (req, res) => {
@@ -1364,7 +1660,7 @@ admin.delete('/categories/:id', (req, res) => {
 });
 
 admin.post('/products', (req, res) => {
-  const product = { id: nextId(), ...readProduct(req.body) };
+  const product = { id: nextId(), published: true, ...readProduct(req.body) };
   db.products.push(product);
   save();
   res.json(publicProduct(product));
