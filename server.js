@@ -36,6 +36,7 @@ const db = {
   orders: [],
   reviews: [],
   profiles: {},
+  carts: {},
   messages: []
 };
 
@@ -53,6 +54,7 @@ if (fs.existsSync(DB_FILE)) {
   save();
 }
 if (!Array.isArray(db.messages)) db.messages = [];
+if (!db.carts || typeof db.carts !== 'object' || Array.isArray(db.carts)) db.carts = {};
 if (!Array.isArray(db.botPending)) db.botPending = [];
 
 
@@ -192,8 +194,10 @@ function telegramUser(initData) {
 }
 
 function identifyCustomer(req, res, next) {
-  const telegram = telegramUser(req.headers['x-tg-init-data']);
+  const initData = String(req.headers['x-tg-init-data'] || '');
+  const telegram = telegramUser(initData);
 
+  if (initData && !telegram) return errorResponse(res, 'Не удалось подтвердить Telegram-аккаунт. Перезапустите магазин через Telegram.', 401);
   if (telegram) {
     req.uid = 'tg:' + telegram.id;
     req.telegram = telegram;
@@ -481,6 +485,33 @@ app.post('/api/products/:id/reviews', identifyCustomer, (req, res) => {
 
   save();
   res.json({ ok: true });
+});
+
+app.get('/api/cart', identifyCustomer, (req, res) => {
+  const cart = db.carts[req.uid] || { items: {}, selected: [], sizes: {} };
+  res.json({ items: cart.items || {}, selected: cart.selected || [], sizes: cart.sizes || {} });
+});
+
+app.put('/api/cart', identifyCustomer, (req, res) => {
+  const body = req.body || {};
+  const incoming = body.items && typeof body.items === 'object' && !Array.isArray(body.items) ? body.items : {};
+  const items = {};
+  for (const [rawId, rawQty] of Object.entries(incoming)) {
+    const product = db.products.find(item => String(item.id) === String(rawId));
+    const qty = Math.floor(Number(rawQty));
+    if (!product || !Number.isFinite(qty) || qty < 1 || product.stock < 1) continue;
+    items[String(product.id)] = Math.min(qty, Number(product.stock));
+  }
+  const selected = Array.isArray(body.selected) ? [...new Set(body.selected.map(String))].filter(id => Object.prototype.hasOwnProperty.call(items, id)) : Object.keys(items);
+  const incomingSizes = body.sizes && typeof body.sizes === 'object' && !Array.isArray(body.sizes) ? body.sizes : {};
+  const sizes = {};
+  for (const [id, size] of Object.entries(incomingSizes)) {
+    const product = db.products.find(item => String(item.id) === id);
+    if (items[id] && product && Array.isArray(product.sizes) && product.sizes.map(String).includes(String(size))) sizes[id] = String(size);
+  }
+  db.carts[req.uid] = { items, selected, sizes, updatedAt: new Date().toISOString() };
+  save();
+  res.json({ ok: true, items, selected, sizes });
 });
 
 app.get('/api/profile', identifyCustomer, (req, res) => {
