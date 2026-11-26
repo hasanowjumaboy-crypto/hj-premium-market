@@ -907,6 +907,21 @@ function botPreview(action) {
     if (!p.discountPercent || !Number.isFinite(Number(p.regularPrice))) throw Object.assign(new Error('У этого товара нет активной скидки'), {status:400});
     return {action:{type:'disable_discount',productId:p.id},preview:{title:'Отключение скидки',target:p.name,oldValue:p.price,newValue:p.regularPrice}};
   }
+  if (action.type === 'update_product') {
+    const p = botProduct(action.productId);
+    if (!p) throw Object.assign(new Error('Товар не найден'), {status:404});
+    const merged = {
+      name: action.product?.name ?? p.name,
+      desc: action.product?.desc ?? p.desc,
+      price: action.product?.price ?? p.price,
+      stock: action.product?.stock ?? p.stock,
+      categoryId: action.product?.categoryId ?? p.categoryId,
+      photos: action.product?.photos,
+      replacePhotos: action.product?.replacePhotos === true
+    };
+    const productData = readProduct(merged, p);
+    return {action:{type:'update_product',productId:p.id,product:productData,expected:{name:p.name,desc:p.desc,price:p.price,stock:p.stock,categoryId:p.categoryId,image:p.image,photos:JSON.stringify(p.photos||[])}},preview:{title:'Изменение карточки товара',target:p.name+' → '+productData.name,oldValue:p.price,newValue:productData.price,stock:productData.stock,category:db.categories.find(x=>x.id===productData.categoryId)?.name||'',photos:productData.photos.length}};
+  }
   if (action.type === 'create_product') {
     const productData = readProduct(action.product || {});
     return {action:{type:'create_product',product:productData},preview:{title:'Добавление товара',target:productData.name,price:productData.price,stock:productData.stock,category:db.categories.find(x=>x.id===productData.categoryId)?.name||'',photos:productData.photos.length}};
@@ -981,6 +996,15 @@ function applyBotAction(action) {
     save();
     return {ok:true,message:'Скидка отключена',product:publicProduct(p)};
   }
+  if (action.type === 'update_product') {
+    const p=botProduct(action.productId);
+    if(!p) throw Object.assign(new Error('Товар больше не найден'),{status:404});
+    const previousPhotos=Array.isArray(p.photos)?p.photos:(p.image?[p.image]:[]);
+    Object.assign(p,action.product);
+    for(const oldPhoto of previousPhotos) if(!p.photos.includes(oldPhoto)) removeImage(oldPhoto);
+    save();
+    return {ok:true,message:'Карточка товара обновлена',product:publicProduct(p)};
+  }
   if (action.type === 'create_product') {
     const product={id:nextId(),...action.product};
     db.products.push(product); save();
@@ -1034,6 +1058,11 @@ app.post('/api/bot/confirm', requireBotApi, (req,res) => {
     if(pending.action.type==='set_discount'||pending.action.type==='disable_discount') {
       const p=botProduct(pending.action.productId);
       if(!p||p.price!==pending.preview.oldValue) return errorResponse(res,'Цена товара изменилась. Подготовьте действие заново',409);
+    }
+    if(pending.action.type==='update_product') {
+      const p=botProduct(pending.action.productId), e=pending.action.expected||{};
+      if(!p || p.name!==e.name || p.desc!==e.desc || p.price!==e.price || p.stock!==e.stock || p.categoryId!==e.categoryId || p.image!==e.image || JSON.stringify(p.photos||[])!==e.photos)
+        return errorResponse(res,'Карточка товара изменилась. Подготовьте действие заново',409);
     }
     const result=applyBotAction(pending.action);
     pending.usedAt=Date.now(); save();
