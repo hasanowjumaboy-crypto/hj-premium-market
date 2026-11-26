@@ -451,8 +451,9 @@ app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
     if (product) product.stock += item.qty;
   }
   order.status = 'Отменён';
-  order.cancelReason = 'Отменён покупателем';
+  order.cancelReason = text(req.body?.cancelReason, 300);
   order.cancelledAt = new Date().toISOString();
+  order.cancelledBy = 'Покупатель';
   save();
   res.json({ ok: true, order });
 });
@@ -761,42 +762,47 @@ admin.get('/customers', (req, res) => {
 admin.put('/orders/:id', (req, res) => {
   const order = db.orders.find(item => item.id === Number(req.params.id));
   if (!order) return errorResponse(res, 'Заказ не найден', 404);
-
   const status = req.body?.status;
   if (!STATUSES.includes(status)) return errorResponse(res, 'Неверный статус');
-
-  if (status === 'Отменён' && order.status !== 'Отменён') {
-    order.items.forEach(item => {
+  const wasCancelled = order.status === 'Отменён';
+  const willBeCancelled = status === 'Отменён';
+  if (willBeCancelled && !wasCancelled) {
+    for (const item of order.items || []) {
       const product = db.products.find(product => product.id === item.productId);
-      if (product) product.stock += item.qty;
-    });
-  }
-
-  if (order.status === 'Отменён' && status !== 'Отменён') {
-    const required = order.items.map(item => [
-      db.products.find(product => product.id === item.productId),
-      item.qty
-    ]);
-
-    if (required.some(([product, qty]) => product && product.stock < qty)) {
-      return errorResponse(res, 'На складе не хватает товара, чтобы вернуть заказ в работу');
+      if (product) product.stock += Number(item.qty || 0);
     }
-
-    required.forEach(([product, qty]) => {
-      if (product) product.stock -= qty;
-    });
   }
-
+  if (wasCancelled && !willBeCancelled) {
+    const required = (order.items || []).map(item => [
+      db.products.find(product => product.id === item.productId),
+      Number(item.qty || 0)
+    ]);
+    if (required.some(([product, qty]) => !product || product.stock < qty)) {
+      return errorResponse(res, 'Не хватает товара на складе, чтобы вернуть заказ в работу. Проверьте остатки товаров');
+    }
+    required.forEach(([product, qty]) => { product.stock -= qty; });
+  }
   order.status = status;
-  if (status === 'Отменён') {
-    order.cancelReason = text(req.body?.cancelReason, 300) || order.cancelReason || 'Причина не указана';
-    order.cancelledAt = new Date().toISOString();
+  if (willBeCancelled) {
+    order.cancelReason = text(req.body?.cancelReason, 300);
+    order.cancelledAt = order.cancelledAt || new Date().toISOString();
+    order.cancelledBy = req.body?.cancelledBy === 'Покупатель' ? 'Покупатель' : 'Администратор';
   } else {
     order.cancelReason = '';
     order.cancelledAt = '';
+    order.cancelledBy = '';
   }
   save();
   res.json(order);
+});
+
+admin.delete('/orders/:id', (req, res) => {
+  const order = db.orders.find(item => item.id === Number(req.params.id));
+  if (!order) return errorResponse(res, 'Заказ не найден', 404);
+  if (order.status !== 'Отменён') return errorResponse(res, 'Удалять можно только отменённые заказы', 400);
+  db.orders = db.orders.filter(item => item.id !== order.id);
+  save();
+  res.json({ ok: true, id: order.id });
 });
 
 admin.post('/categories', (req, res) => {
@@ -838,6 +844,18 @@ admin.delete('/categories/:id', (req, res) => {
 admin.post('/products', (req, res) => {
   const product = { id: nextId(), ...readProduct(req.body) };
   db.products.push(product);
+  save();
+  res.json(publicProduct(product));
+});
+
+admin.put('/products/:id/main-photo', (req, res) => {
+  const product = db.products.find(item => item.id === Number(req.params.id));
+  if (!product) return errorResponse(res, 'Товар не найден', 404);
+  const photos = [...new Set([...(Array.isArray(product.photos) ? product.photos : []), product.image].filter(Boolean))];
+  const selected = String(req.body?.photo || '');
+  if (!selected || !photos.includes(selected)) return errorResponse(res, 'Выбранное фото не найдено у этого товара', 400);
+  product.photos = [selected, ...photos.filter(photo => photo !== selected)].slice(0, 10);
+  product.image = selected;
   save();
   res.json(publicProduct(product));
 });
