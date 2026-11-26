@@ -253,6 +253,7 @@ function publicProduct(product) {
     price: product.price,
     regularPrice: product.discountPercent ? Number(product.regularPrice) : null,
     discountPercent: product.discountPercent || 0,
+    discountReason: product.discountPercent ? (product.discountReason || '') : '',
     stock: product.stock,
     image: product.image,
     photos: Array.isArray(product.photos) && product.photos.length ? product.photos : (product.image ? [product.image] : []),
@@ -888,7 +889,8 @@ function botPreview(action) {
     if (!Number.isInteger(percent) || percent < 1 || percent > 90) throw Object.assign(new Error('Скидка должна быть от 1 до 90 процентов'), {status:400});
     const basePrice = Number(p.regularPrice ?? p.price);
     const discounted = Math.round(basePrice * (1 - percent / 100) * 100) / 100;
-    return {action:{type:'set_discount',productId:p.id,percent},preview:{title:'Включение скидки',target:p.name,oldValue:p.price,newValue:discounted,percent}};
+    const reason = String(action.reason || '').trim().slice(0,100);
+    return {action:{type:'set_discount',productId:p.id,percent,reason},preview:{title:'Включение скидки',target:p.name,oldValue:p.price,newValue:discounted,percent,reason}};
   }
   if (action.type === 'disable_discount') {
     const p = botProduct(action.productId);
@@ -944,6 +946,7 @@ function applyBotAction(action) {
     const basePrice=Number(p.regularPrice ?? p.price);
     p.regularPrice=basePrice;
     p.discountPercent=action.percent;
+    p.discountReason=String(action.reason || '').trim().slice(0,100);
     p.price=Math.round(basePrice*(1-action.percent/100)*100)/100;
     save();
     return {ok:true,message:'Скидка включена',product:publicProduct(p)};
@@ -954,6 +957,7 @@ function applyBotAction(action) {
     p.price=Number(p.regularPrice);
     delete p.regularPrice;
     delete p.discountPercent;
+    delete p.discountReason;
     save();
     return {ok:true,message:'Скидка отключена',product:publicProduct(p)};
   }
