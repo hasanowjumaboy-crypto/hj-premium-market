@@ -337,26 +337,24 @@ app.post('/api/products/:id/reviews', identifyCustomer, (req, res) => {
     return errorResponse(res, 'Поставьте оценку от 1 до 5');
   }
 
+  const orderId = Number(req.body?.orderId);
+  const order = db.orders.find(item => item.id === orderId && item.uid === req.uid && item.status === 'Доставлен' && (item.items || []).some(orderedItem => orderedItem.productId === product.id));
+  if (!order) return errorResponse(res, 'Оставить отзыв можно только на товар из доставленного заказа');
+  const orderedItem = order.items.find(item => item.productId === product.id);
   const reviewText = text(req.body?.text, 500);
   const name = customerName(req);
   const date = new Date().toISOString();
-  const existing = db.reviews.find(review =>
-    review.productId === product.id && review.uid === req.uid
-  );
-
-  if (existing) {
-    Object.assign(existing, { rating, text: reviewText, name, date });
-  } else {
-    db.reviews.push({
-      id: nextId(),
-      productId: product.id,
-      uid: req.uid,
-      rating,
-      text: reviewText,
-      name,
-      date
-    });
-  }
+  const reviewData = {
+    orderId: order.id,
+    productName: orderedItem.name || product.name,
+    productImage: orderedItem.image || product.image || '',
+    productPhotos: Array.isArray(orderedItem.photos) && orderedItem.photos.length ? orderedItem.photos : (orderedItem.image || product.image ? [orderedItem.image || product.image] : []),
+    productDesc: orderedItem.desc || product.desc || '',
+    buyerName: order.name || name
+  };
+  const existing = db.reviews.find(review => review.productId === product.id && review.uid === req.uid);
+  if (existing) Object.assign(existing, reviewData, { rating, text: reviewText, name, date });
+  else db.reviews.push({ id: nextId(), productId: product.id, uid: req.uid, ...reviewData, rating, text: reviewText, name, date });
 
   save();
   res.json({ ok: true });
@@ -422,7 +420,7 @@ app.get('/api/orders', identifyCustomer, (req, res) => {
     .filter(order => order.uid === req.uid)
     .map(order => ({
       id: order.id,
-      items: order.items,
+      items: (order.items || []).map(item => ({ ...item, reviewed: db.reviews.some(review => review.uid === req.uid && review.productId === item.productId) })),
       total: order.total,
       status: order.status,
       cancelReason: order.cancelReason || '',
@@ -922,14 +920,19 @@ admin.get('/reviews', (req, res) => {
   res.json(
     [...db.reviews]
       .sort((a, b) => b.date.localeCompare(a.date))
-      .map(review => ({
-        id: review.id,
-        name: review.name,
-        rating: review.rating,
-        text: review.text,
-        date: review.date,
-        product: db.products.find(product => product.id === review.productId)?.name || 'Удалённый товар'
-      }))
+      .map(review => {
+        const product = db.products.find(product => product.id === review.productId);
+        return {
+          id: review.id, name: review.name, buyerName: review.buyerName || review.name,
+          rating: review.rating, text: review.text, date: review.date,
+          orderId: review.orderId || null, verified: Boolean(review.orderId), productId: review.productId,
+          product: review.productName || product?.name || 'Удалённый товар',
+          productName: review.productName || product?.name || 'Удалённый товар',
+          productImage: review.productImage || product?.image || '',
+          productPhotos: review.productPhotos || product?.photos || (product?.image ? [product.image] : []),
+          productDesc: review.productDesc || product?.desc || '', productPrice: product?.price ?? null
+        };
+      })
   );
 });
 
