@@ -20,7 +20,7 @@ const SECRET =
   process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update('hj-market:' + ADMIN_PASSWORD).digest('hex');
 
-const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Отправлен', 'Доставлен', 'Отменён'];
+const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Собран', 'Отправлен', 'В пути', 'Доставлен', 'Отменён'];
 
 fs.mkdirSync(UPLOADS, { recursive: true });
 
@@ -425,6 +425,7 @@ app.get('/api/orders', identifyCustomer, (req, res) => {
       items: order.items,
       total: order.total,
       status: order.status,
+      cancelReason: order.cancelReason || '',
       date: order.date,
       phone: order.phone,
       address: order.address,
@@ -450,6 +451,7 @@ app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
     if (product) product.stock += item.qty;
   }
   order.status = 'Отменён';
+  order.cancelReason = 'Отменён покупателем';
   order.cancelledAt = new Date().toISOString();
   save();
   res.json({ ok: true, order });
@@ -786,6 +788,13 @@ admin.put('/orders/:id', (req, res) => {
   }
 
   order.status = status;
+  if (status === 'Отменён') {
+    order.cancelReason = text(req.body?.cancelReason, 300) || order.cancelReason || 'Причина не указана';
+    order.cancelledAt = new Date().toISOString();
+  } else {
+    order.cancelReason = '';
+    order.cancelledAt = '';
+  }
   save();
   res.json(order);
 });
