@@ -390,7 +390,7 @@ app.post('/telegram/webhook', async (req, res) => {
   res.sendStatus(200);
   const message = req.body?.message;
   const chatId = message?.chat?.id;
-  const command = String(message?.text || '').trim().split(/\\s+/, 1)[0].split('@')[0].toLowerCase();
+  const command = String(message?.text || '').trim().split(/\s+/, 1)[0].split('@')[0].toLowerCase();
   if (!chatId) return;
 
   if (command === '/start' || command === '/start@hj_premium_market_bot') {
