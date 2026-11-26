@@ -31,7 +31,8 @@ const db = {
   products: [],
   orders: [],
   reviews: [],
-  profiles: {}
+  profiles: {},
+  messages: []
 };
 
 if (fs.existsSync(DB_FILE)) {
@@ -47,6 +48,7 @@ if (fs.existsSync(DB_FILE)) {
   });
   save();
 }
+if (!Array.isArray(db.messages)) db.messages = [];
 
 
 if (!db.demoCatalogSeeded) {
@@ -416,6 +418,22 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   res.json(db.profiles[req.uid]);
 });
 
+// Переписка покупателя с магазином.
+app.get('/api/chat', identifyCustomer, (req, res) => {
+  const chat = db.messages.find(item => item.uid === req.uid);
+  res.json({ messages: chat?.messages || [], subject: chat?.subject || '' });
+});
+app.post('/api/chat', identifyCustomer, (req, res) => {
+  const body = req.body || {}; const messageText = text(body.text, 2000);
+  let image = ''; if (body.image) image = saveImage(body.image);
+  if (!messageText && !image) return errorResponse(res, 'Напишите сообщение или прикрепите фото');
+  let chat = db.messages.find(item => item.uid === req.uid);
+  if (!chat) { chat = { uid: req.uid, subject: text(body.subject, 80) || 'Общий вопрос', createdAt: new Date().toISOString(), messages: [] }; db.messages.push(chat); }
+  const message = { id: nextId(), uid: req.uid, sender: 'customer', text: messageText, image, date: new Date().toISOString() };
+  chat.messages = Array.isArray(chat.messages) ? chat.messages : []; chat.messages.push(message); chat.lastMessage = message.date; chat.lastText = messageText || 'Фото';
+  save(); res.json({ ok: true, message, subject: chat.subject });
+});
+
 app.get('/api/orders', identifyCustomer, (req, res) => {
   const orders = db.orders
     .filter(order => order.uid === req.uid)
@@ -756,6 +774,27 @@ admin.get('/categories', (req, res) => {
 });
 
 admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
+// Список отдельных чатов покупателей и их переписка.
+admin.get('/messages', (req, res) => {
+ const chats = db.messages.map(chat => {
+  const profile = db.profiles[chat.uid] || {}; const orders = db.orders.filter(order => order.uid === chat.uid).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const last = (chat.messages || []).slice(-1)[0] || {};
+  return { uid: chat.uid, subject: chat.subject || 'Общий вопрос', name: [profile.firstName,profile.lastName,profile.middleName].filter(Boolean).join(' ') || orders[0]?.name || 'Покупатель', phone: profile.phone || orders[0]?.phone || '', lastMessage: last.date || chat.createdAt || '', lastText: last.text || (last.image ? 'Фото' : ''), unread: (chat.messages || []).filter(m=>m.sender==='customer'&&!m.readByAdmin).length, messageCount: (chat.messages || []).length };
+ }).sort((a,b)=>new Date(b.lastMessage)-new Date(a.lastMessage)); res.json(chats);
+});
+admin.get('/messages/:uid', (req, res) => {
+ const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
+ const profile=db.profiles[uid]||{}; const orders=db.orders.filter(order=>order.uid===uid).sort((a,b)=>new Date(b.date)-new Date(a.date));
+ (chat.messages||[]).forEach(m=>{if(m.sender==='customer')m.readByAdmin=true;}); save();
+ res.json({uid,subject:chat.subject||'Общий вопрос',profile:{firstName:profile.firstName||'',lastName:profile.lastName||'',middleName:profile.middleName||'',phone:profile.phone||orders[0]?.phone||'',gender:profile.gender||orders[0]?.gender||'',age:profile.age||orders[0]?.age||'',address:profile.address||orders[0]?.address||'',photo:profile.photo||''},orders:orders.map(o=>({id:o.id,status:o.status,total:o.total,date:o.date})),messages:chat.messages||[]});
+});
+admin.post('/messages/:uid', (req, res) => {
+ const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
+ const messageText=text(req.body?.text,2000); let image=''; if(req.body?.image)image=saveImage(req.body.image);
+ if(!messageText&&!image)return errorResponse(res,'Напишите ответ или прикрепите фото');
+ const message={id:nextId(),uid,sender:'admin',text:messageText,image,date:new Date().toISOString()}; chat.messages=Array.isArray(chat.messages)?chat.messages:[]; chat.messages.push(message); chat.lastMessage=message.date; chat.lastText=messageText||'Фото'; save(); res.json({ok:true,message});
+});
+
 
 // Customer directory for the owner panel. Private contact details are returned only
 // behind requireAdmin and are never exposed by the public storefront API.
