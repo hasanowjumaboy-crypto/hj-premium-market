@@ -24,6 +24,8 @@ const STATUSES = ['Новый', 'Подтверждён', 'Собирается'
 
 fs.mkdirSync(UPLOADS, { recursive: true });
 
+const chatTyping = new Map();
+
 const db = {
   seq: 1,
   orderNo: 0,
@@ -442,6 +444,8 @@ app.get('/api/chat', identifyChatCustomer, (req, res) => {
   }
   res.json({ messages: (chat?.messages || []).filter(m => !(m.hiddenFor || []).includes('customer')), subject: chat?.subject || '' });
 });
+app.get('/api/chat/typing', identifyChatCustomer, (req,res)=>{const t=chatTyping.get(req.uid)||{};res.json({typing:Boolean(t.admin&&Date.now()-t.admin<2800)});});
+app.post('/api/chat/typing', identifyChatCustomer, (req,res)=>{const t=chatTyping.get(req.uid)||{};if(req.body?.typing===true)t.customer=Date.now();else delete t.customer;chatTyping.set(req.uid,t);res.json({ok:true});});
 app.post('/api/chat', identifyChatCustomer, (req, res) => {
   const body = req.body || {}; const messageText = text(body.text, 2000);
   let image = ''; if (body.image) image = saveImage(body.image);
@@ -804,6 +808,8 @@ admin.get('/messages', (req, res) => {
   return { uid: chat.uid, subject: chat.subject || 'Общий вопрос', name: [profile.firstName,profile.lastName,profile.middleName].filter(Boolean).join(' ') || orders[0]?.name || 'Покупатель', phone: profile.phone || orders[0]?.phone || '', lastMessage: last.date || chat.createdAt || '', lastText: last.text || (last.image ? 'Фото' : ''), unread: (chat.messages || []).filter(m=>m.sender==='customer'&&!m.readByAdmin).length, messageCount: (chat.messages || []).length };
  }).sort((a,b)=>new Date(b.lastMessage)-new Date(a.lastMessage)); res.json(chats);
 });
+admin.get('/messages/:uid/typing',(req,res)=>{const t=chatTyping.get(String(req.params.uid||''))||{};res.json({typing:Boolean(t.customer&&Date.now()-t.customer<2800)});});
+admin.post('/messages/:uid/typing',(req,res)=>{const uid=String(req.params.uid||'');const t=chatTyping.get(uid)||{};if(req.body?.typing===true)t.admin=Date.now();else delete t.admin;chatTyping.set(uid,t);res.json({ok:true});});
 admin.get('/messages/:uid', (req, res) => {
  const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
  const profile=db.profiles[uid]||{}; const orders=db.orders.filter(order=>order.uid===uid).sort((a,b)=>new Date(b.date)-new Date(a.date));
