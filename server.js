@@ -420,6 +420,26 @@ app.post('/telegram/webhook', async (req, res) => {
     } catch (error) {
       console.error('Не удалось отправить помощь Telegram:', error.message);
     }
+  } else if (String(message.chat?.type) === 'private' && String(message.from?.id || '') === BOT_OWNER_ID && String(message.text || '').trim()) {
+    const owner='telegram:'+BOT_OWNER_ID;
+    const incoming=String(message.text).trim();
+    try {
+      let result;
+      if (/^\d{6}$/.test(incoming)) result=aiConfirmPlan(incoming,owner);
+      else {
+        const history=Array.isArray(db.aiHistory?.[owner])?db.aiHistory[owner]:[];
+        result=await aiPreparePlan(incoming,history,owner);
+        db.aiHistory=db.aiHistory||{};
+        db.aiHistory[owner]=[...history,{role:'user',text:incoming},{role:'assistant',text:result.message||''}].slice(-8);
+        save();
+      }
+      let reply=result.message||'';
+      if(result.preview?.length) reply+='\n\nПРЕДВАРИТЕЛЬНЫЙ ПРОСМОТР:\n'+result.preview.map(x=>x.number+'. '+x.description).join('\n')+'\n\nДля подтверждения отправь код: '+result.code+'\nКод действует 5 минут. До подтверждения ничего не изменено.';
+      if(result.results?.length) reply='✅ '+result.message;
+      await telegramApi('sendMessage',{chat_id:chatId,text:reply.slice(0,3900)});
+    } catch(error) {
+      await telegramApi('sendMessage',{chat_id:chatId,text:'⚠️ '+text(error.message||'Ошибка AI Gemini',900)}).catch(()=>{});
+    }
   }
 });
 
@@ -1406,46 +1426,49 @@ function cleanAiPending() {
   db.aiPending=Array.isArray(db.aiPending)?db.aiPending:[];
   db.aiPending=db.aiPending.filter(x=>!x.usedAt&&x.expiresAt>Date.now());
 }
+
+async function aiPreparePlan(message, history, owner) {
+  const snapshot=aiAgentSnapshot();
+  const plan=await askGeminiForShopPlan(message,snapshot,history);
+  if(!plan.actions.length)return {ok:true,message:plan.message||'Вот что удалось выяснить по данным магазина.',actions:[],snapshot:snapshot.overview};
+  const actions=plan.actions.map(aiNormalizeAction);
+  const previews=actions.map((a,index)=>({number:index+1,description:aiDescribeAction(a),snapshot:aiActionSnapshot(a)}));
+  const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+  const pendingId=crypto.randomBytes(16).toString('hex');
+  const codeHash=crypto.createHmac('sha256',SECRET).update(owner+':'+pendingId+':'+code).digest('hex');
+  cleanAiPending();
+  db.aiPending.push({id:pendingId,owner,actions,previews,codeHash,createdAt:Date.now(),expiresAt:Date.now()+5*60*1000,attempts:0});
+  db.aiPending=db.aiPending.slice(-20);save();
+  return {ok:true,message:plan.message||'Я подготовил план. Проверь каждое действие.',requiresConfirmation:true,preview:previews,code,expiresInSeconds:300};
+}
+function aiConfirmPlan(code, owner) {
+  cleanAiPending();
+  const pending=[...db.aiPending].reverse().find(x=>x.owner===owner&&!x.usedAt);
+  if(!pending)throw Object.assign(new Error('Подтверждение не найдено или срок истёк'),{status:404});
+  const expected=Buffer.from(pending.codeHash);
+  const supplied=Buffer.from(crypto.createHmac('sha256',SECRET).update(owner+':'+pending.id+':'+String(code||'')).digest('hex'));
+  if(!/^\d{6}$/.test(String(code||''))||supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected)) {
+    pending.attempts=(pending.attempts||0)+1;if(pending.attempts>=5)pending.usedAt=Date.now();save();
+    throw Object.assign(new Error('Неверный код. Осталось попыток: '+Math.max(0,5-pending.attempts)),{status:401});
+  }
+  for(let i=0;i<pending.actions.length;i++) {
+    if(!aiCheckSnapshot(pending.previews[i].snapshot,pending.actions[i]))throw Object.assign(new Error('Данные магазина изменились после предварительного просмотра. Подготовьте команду заново.'),{status:409});
+  }
+  const results=pending.actions.map(aiApplyAction);
+  pending.usedAt=Date.now();save();
+  return {ok:true,message:'Выполнено и сохранено: '+results.join('; '),results};
+}
 admin.post('/ai', async (req,res) => {
   try {
     const message=text(req.body?.message,2000);
     if(!message)return errorResponse(res,'Напишите, что нужно сделать или узнать');
     if(!process.env.GEMINI_API_KEY)return errorResponse(res,'Gemini ещё не подключён: добавьте GEMINI_API_KEY в переменные Railway сервиса HJ PREMIUM MARKET',503);
-    const snapshot=aiAgentSnapshot();
-    const history=Array.isArray(req.body?.history)?req.body.history.slice(-8):[];
-    const plan=await askGeminiForShopPlan(message,snapshot,history);
-    if(!plan.actions.length)return res.json({ok:true,message:plan.message||'Готово, вот что удалось выяснить по данным магазина.',actions:[],snapshot:snapshot.overview});
-    const actions=plan.actions.map(aiNormalizeAction);
-    const previews=actions.map((a,index)=>({number:index+1,description:aiDescribeAction(a),snapshot:aiActionSnapshot(a)}));
-    const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
-    const pendingId=crypto.randomBytes(16).toString('hex');
-    const owner='admin-session';
-    const codeHash=crypto.createHmac('sha256',SECRET).update(owner+':'+pendingId+':'+code).digest('hex');
-    cleanAiPending();
-    db.aiPending.push({id:pendingId,owner,actions,previews,codeHash,createdAt:Date.now(),expiresAt:Date.now()+5*60*1000,attempts:0});
-    db.aiPending=db.aiPending.slice(-10);save();
-    res.json({ok:true,message:plan.message||'Я подготовил план. Проверь каждое действие.',requiresConfirmation:true,preview:previews,code,expiresInSeconds:300});
+    res.json(await aiPreparePlan(message,req.body?.history||[],'admin-session'));
   } catch(error) { errorResponse(res,error.message||'AI agent error',error.status||400); }
 });
 admin.post('/ai/confirm', (req,res) => {
-  cleanAiPending();
-  const pending=[...db.aiPending].reverse().find(x=>x.owner==='admin-session'&&!x.usedAt);
-  if(!pending)return errorResponse(res,'Подтверждение не найдено или срок истёк',404);
-  const code=String(req.body?.code||'');
-  const expected=Buffer.from(pending.codeHash);
-  const supplied=Buffer.from(crypto.createHmac('sha256',SECRET).update('admin-session:'+pending.id+':'+code).digest('hex'));
-  if(!/^\d{6}$/.test(code)||supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected)) {
-    pending.attempts=(pending.attempts||0)+1;if(pending.attempts>=5)pending.usedAt=Date.now();save();
-    return errorResponse(res,'Неверный код. Осталось попыток: '+Math.max(0,5-pending.attempts),401);
-  }
-  try {
-    for(let i=0;i<pending.actions.length;i++) {
-      if(!aiCheckSnapshot(pending.previews[i].snapshot,pending.actions[i]))throw new Error('Данные магазина изменились после предварительного просмотра. Подготовьте команду заново.');
-    }
-    const results=pending.actions.map(aiApplyAction);
-    pending.usedAt=Date.now();save();
-    res.json({ok:true,message:'Выполнено и сохранено: '+results.join('; '),results});
-  } catch(error) { errorResponse(res,error.message||'Не удалось выполнить план',409); }
+  try { res.json(aiConfirmPlan(req.body?.code,'admin-session')); }
+  catch(error) { errorResponse(res,error.message||'Не удалось подтвердить действие',error.status||400); }
 });
 admin.get('/stats', (req, res) => {
   const activeOrders = db.orders.filter(order => order.status !== 'Отменён');
