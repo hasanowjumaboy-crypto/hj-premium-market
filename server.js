@@ -350,6 +350,7 @@ app.post('/api/products/:id/reviews', identifyCustomer, (req, res) => {
     productImage: orderedItem.image || product.image || '',
     productPhotos: Array.isArray(orderedItem.photos) && orderedItem.photos.length ? orderedItem.photos : (orderedItem.image || product.image ? [orderedItem.image || product.image] : []),
     productDesc: orderedItem.desc || product.desc || '',
+    productPrice: orderedItem.price ?? product.price,
     buyerName: order.name || name
   };
   const existing = db.reviews.find(review => review.productId === product.id && review.uid === req.uid);
@@ -930,7 +931,7 @@ admin.get('/reviews', (req, res) => {
           productName: review.productName || product?.name || 'Удалённый товар',
           productImage: review.productImage || product?.image || '',
           productPhotos: review.productPhotos || product?.photos || (product?.image ? [product.image] : []),
-          productDesc: review.productDesc || product?.desc || '', productPrice: product?.price ?? null
+          productDesc: review.productDesc || product?.desc || '', productPrice: review.productPrice ?? product?.price ?? null
         };
       })
   );
