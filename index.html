@@ -47,7 +47,9 @@ function bindCommon(){
  const root=$('#root');
  root.onclick=async e=>{
   const view=e.target.closest('[data-view]');if(view){state.view=view.dataset.view;if(state.view==='home'){state.category='all';state.search='';}render();if(state.view==='profile')loadProfile();return}
-  if(e.target.closest('#profileData')){state.profileEditing=true;render();return}\n  if(e.target.closest('#profileBack')){state.profileEditing=false;render();return}\n  const openCat=e.target.closest('[data-open-category]');if(openCat){state.category=openCat.dataset.openCategory;state.search='';state.view='category';render();return}
+  if(e.target.closest('#profileData')){state.profileEditing=true;render();return}
+  if(e.target.closest('#profileBack')){state.profileEditing=false;render();return}
+  const openCat=e.target.closest('[data-open-category]');if(openCat){state.category=openCat.dataset.openCategory;state.search='';state.view='category';render();return}
   const cat=e.target.closest('[data-cat]');if(cat){state.category=cat.dataset.cat;state.view='category';render();return}
   const add=e.target.closest('[data-add]');if(add){const p=state.products.find(x=>String(x.id)===String(add.dataset.add));if(!p)return;if(p.sizes?.length&&!state.selectedSizes[p.id]){toast('Сначала выберите размер кольца');return}changeQty(p.id,1);return}
   const plus=e.target.closest('[data-plus]');if(plus){changeQty(plus.dataset.plus,1);return}
