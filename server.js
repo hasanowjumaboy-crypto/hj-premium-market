@@ -1189,7 +1189,7 @@ function aiAgentSnapshot() {
   };
 }
 
-async function askGeminiForShopPlan(message, snapshot) {
+async function askGeminiForShopPlan(message, snapshot, history = []) {
   const apiKey=process.env.GEMINI_API_KEY;
   if(!apiKey) throw Object.assign(new Error('Для AI-помощника магазина не задан GEMINI_API_KEY. Добавьте ключ Gemini в переменные Railway сервиса HJ PREMIUM MARKET.'),{status:503});
   const system = [
@@ -1207,7 +1207,8 @@ async function askGeminiForShopPlan(message, snapshot) {
     'Не утверждай, что действие уже выполнено. На этом этапе только составь план.',
     'Максимум 10 действий за один запрос. Для неподдерживаемой задачи объясни ограничение в message и верни actions=[].'
   ].join('\n');
-  const contents=JSON.stringify({message,snapshot});
+  const safeHistory=Array.isArray(history)?history.slice(-8).map(item=>({role:item?.role==='user'?'user':'assistant',text:text(item?.text,1200)})):[];
+  const contents=JSON.stringify({message,history:safeHistory,snapshot});
   let lastError=null;
   for(const model of [...new Set([AI_AGENT_MODEL,AI_AGENT_FALLBACK_MODEL])]) {
     try {
@@ -1411,7 +1412,8 @@ admin.post('/ai', async (req,res) => {
     if(!message)return errorResponse(res,'Напишите, что нужно сделать или узнать');
     if(!process.env.GEMINI_API_KEY)return errorResponse(res,'Gemini ещё не подключён: добавьте GEMINI_API_KEY в переменные Railway сервиса HJ PREMIUM MARKET',503);
     const snapshot=aiAgentSnapshot();
-    const plan=await askGeminiForShopPlan(message,snapshot);
+    const history=Array.isArray(req.body?.history)?req.body.history.slice(-8):[];
+    const plan=await askGeminiForShopPlan(message,snapshot,history);
     if(!plan.actions.length)return res.json({ok:true,message:plan.message||'Готово, вот что удалось выяснить по данным магазина.',actions:[],snapshot:snapshot.overview});
     const actions=plan.actions.map(aiNormalizeAction);
     const previews=actions.map((a,index)=>({number:index+1,description:aiDescribeAction(a),snapshot:aiActionSnapshot(a)}));
