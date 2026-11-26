@@ -270,7 +270,7 @@ function readProduct(body, oldProduct = null) {
     const value = String(photoData || '');
     const savedPhoto = value.startsWith('/uploads/')
       ? (/^\/uploads\/[a-f0-9]+\.(jpg|jpeg|png|webp)$/.test(value) ? value : '')
-      : saveImage(value);
+      : (/^https:\/\/[^\s]+$/i.test(value) ? value : saveImage(value));
     if (!savedPhoto) throw Object.assign(new Error('Некорректная фотография товара'), { status: 400 });
     photos.push(savedPhoto);
   }
