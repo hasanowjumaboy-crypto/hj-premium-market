@@ -251,6 +251,8 @@ function publicProduct(product) {
     name: product.name,
     desc: product.desc,
     price: product.price,
+    regularPrice: product.discountPercent ? Number(product.regularPrice) : null,
+    discountPercent: product.discountPercent || 0,
     stock: product.stock,
     image: product.image,
     photos: Array.isArray(product.photos) && product.photos.length ? product.photos : (product.image ? [product.image] : []),
@@ -1310,7 +1312,12 @@ admin.put('/products/:id', (req, res) => {
   const product = db.products.find(item => item.id === Number(req.params.id));
   if (!product) return errorResponse(res, 'Товар не найден', 404);
 
+  const previousPrice = Number(product.price);
   Object.assign(product, readProduct(req.body, product));
+  if (Number(product.price) !== previousPrice) {
+    delete product.regularPrice;
+    delete product.discountPercent;
+  }
   save();
   res.json(publicProduct(product));
 });
