@@ -214,16 +214,7 @@ function identifyCustomer(req, res, next) {
 }
 
 function identifyChatCustomer(req, res, next) {
-  const deviceId = String(req.headers['x-device-id'] || '');
-  if (!/^[a-f0-9]{32}$/.test(deviceId)) return errorResponse(res, 'Нет идентификатора устройства', 401);
-  const uid = 'web:' + hash(deviceId).toString('hex').slice(0, 32);
-  const telegram = telegramUser(req.headers['x-tg-init-data']);
-  if (!db.messages.some(item => item.uid === uid) && telegram) {
-    const legacy = db.messages.find(item => item.uid === 'tg:' + telegram.id);
-    if (legacy) { legacy.uid = uid; (legacy.messages || []).forEach(message => { message.uid = uid; }); save(); }
-  }
-  req.uid = uid;
-  next();
+  return identifyCustomer(req, res, next);
 }
 
 function customerName(req) {
