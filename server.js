@@ -1222,6 +1222,7 @@ admin.get('/stats', (req, res) => {
     items,
     salesRevenue,
     salesOrders: activeOrders.length,
+    discountedProducts: db.products.filter(p => Number(p.discountPercent) > 0 && Number(p.regularPrice) > Number(p.price)).map(p => ({id:p.id,name:p.name,price:p.price,regularPrice:p.regularPrice,discountPercent:p.discountPercent,stock:p.stock})),
     reviews: db.reviews.length,
     top: salesProducts.slice(0, 10),
     salesProducts
@@ -1415,6 +1416,32 @@ admin.put('/products/:id', (req, res) => {
     delete product.regularPrice;
     delete product.discountPercent;
   }
+  save();
+  res.json(publicProduct(product));
+});
+
+admin.post('/products/:id/discount', (req, res) => {
+  const product = db.products.find(item => item.id === Number(req.params.id));
+  if (!product) return errorResponse(res, 'Товар не найден', 404);
+  const percent = Number(req.body?.percent);
+  if (!Number.isInteger(percent) || percent < 1 || percent > 99) return errorResponse(res, 'Укажите скидку целым числом от 1 до 99%', 400);
+  const regularPrice = Number(product.discountPercent) > 0 && Number(product.regularPrice) > 0 ? Number(product.regularPrice) : Number(product.price);
+  const discountedPrice = Math.round(regularPrice * (100 - percent)) / 100;
+  if (!Number.isFinite(regularPrice) || regularPrice <= 0 || discountedPrice <= 0 || discountedPrice >= regularPrice) return errorResponse(res, 'Для этой цены нельзя применить такую скидку. Уменьшите процент.', 400);
+  product.regularPrice = Math.round(regularPrice * 100) / 100;
+  product.discountPercent = percent;
+  product.price = discountedPrice;
+  save();
+  res.json(publicProduct(product));
+});
+
+admin.delete('/products/:id/discount', (req, res) => {
+  const product = db.products.find(item => item.id === Number(req.params.id));
+  if (!product) return errorResponse(res, 'Товар не найден', 404);
+  if (Number(product.discountPercent) > 0 && Number(product.regularPrice) > 0) product.price = Number(product.regularPrice);
+  delete product.regularPrice;
+  delete product.discountPercent;
+  delete product.discountReason;
   save();
   res.json(publicProduct(product));
 });
