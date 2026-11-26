@@ -434,6 +434,12 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
 // Переписка покупателя с магазином.
 app.get('/api/chat', identifyChatCustomer, (req, res) => {
   const chat = db.messages.find(item => item.uid === req.uid);
+  if (chat) {
+    (chat.messages || []).forEach(message => {
+      if (message.sender === 'admin') message.readByCustomer = true;
+    });
+    save();
+  }
   res.json({ messages: chat?.messages || [], subject: chat?.subject || '' });
 });
 app.post('/api/chat', identifyChatCustomer, (req, res) => {
@@ -442,7 +448,7 @@ app.post('/api/chat', identifyChatCustomer, (req, res) => {
   if (!messageText && !image) return errorResponse(res, 'Напишите сообщение или прикрепите фото');
   let chat = db.messages.find(item => item.uid === req.uid);
   if (!chat) { chat = { uid: req.uid, subject: text(body.subject, 80) || 'Общий вопрос', createdAt: new Date().toISOString(), messages: [] }; db.messages.push(chat); }
-  const message = { id: nextId(), uid: req.uid, sender: 'customer', text: messageText, image, date: new Date().toISOString() };
+  const message = { id: nextId(), uid: req.uid, sender: 'customer', text: messageText, image, date: new Date().toISOString(), readByAdmin: false };
   chat.messages = Array.isArray(chat.messages) ? chat.messages : []; chat.messages.push(message); chat.lastMessage = message.date; chat.lastText = messageText || 'Фото';
   save(); res.json({ ok: true, message, subject: chat.subject });
 });
@@ -805,7 +811,7 @@ admin.post('/messages/:uid', (req, res) => {
  const uid=String(req.params.uid||''); const chat=db.messages.find(item=>item.uid===uid); if(!chat)return errorResponse(res,'Чат не найден',404);
  const messageText=text(req.body?.text,2000); let image=''; if(req.body?.image)image=saveImage(req.body.image);
  if(!messageText&&!image)return errorResponse(res,'Напишите ответ или прикрепите фото');
- const message={id:nextId(),uid,sender:'admin',text:messageText,image,date:new Date().toISOString()}; chat.messages=Array.isArray(chat.messages)?chat.messages:[]; chat.messages.push(message); chat.lastMessage=message.date; chat.lastText=messageText||'Фото'; save(); res.json({ok:true,message});
+ const message={id:nextId(),uid,sender:'admin',text:messageText,image,date:new Date().toISOString(),readByCustomer:false}; chat.messages=Array.isArray(chat.messages)?chat.messages:[]; chat.messages.push(message); chat.lastMessage=message.date; chat.lastText=messageText||'Фото'; save(); res.json({ok:true,message});
 });
 
 
