@@ -950,7 +950,7 @@ app.post('/api/bot/confirm', requireBotApi, (req,res) => {
   const pending=[...db.botPending].reverse().find(x=>x.ownerId===ownerId&&!x.usedAt);
   if(!pending) return errorResponse(res,'Подтверждение не найдено или срок истёк',404);
   const code=String(req.body?.code||'');
-  if(!/^\\d{6}$/.test(code)||!crypto.timingSafeEqual(Buffer.from(botCodeHash(code,pending.id,ownerId)),Buffer.from(pending.codeHash))) {
+  if(!/^\d{6}$/.test(code)||!crypto.timingSafeEqual(Buffer.from(botCodeHash(code,pending.id,ownerId)),Buffer.from(pending.codeHash))) {
     pending.attempts=(pending.attempts||0)+1; if(pending.attempts>=5) pending.usedAt=Date.now(); save();
     return errorResponse(res,'Неверный код. Осталось попыток: '+Math.max(0,5-pending.attempts),401);
   }
