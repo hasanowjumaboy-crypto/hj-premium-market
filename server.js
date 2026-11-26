@@ -694,26 +694,57 @@ admin.use(requireAdmin);
 
 admin.get('/stats', (req, res) => {
   const activeOrders = db.orders.filter(order => order.status !== 'Отменён');
-  const soldByName = {};
+  const sales = new Map();
 
   activeOrders.forEach(order => {
-    order.items.forEach(item => {
-      soldByName[item.name] = (soldByName[item.name] || 0) + item.qty;
+    (Array.isArray(order.items) ? order.items : []).forEach(item => {
+      const key = String(item.productId || item.name || 'unknown');
+      const qty = Math.max(0, Number(item.qty) || 0);
+      const price = Math.max(0, Number(item.price) || 0);
+      const row = sales.get(key) || {
+        productId: item.productId || null,
+        name: item.name || 'Товар без названия',
+        image: item.image || item.photos?.[0] || '',
+        photos: Array.isArray(item.photos) ? item.photos : (item.image ? [item.image] : []),
+        qty: 0,
+        revenue: 0,
+        orderIds: new Set()
+      };
+      row.qty += qty;
+      row.revenue += price * qty;
+      row.orderIds.add(order.id);
+      if (!row.image && (item.image || item.photos?.[0])) row.image = item.image || item.photos[0];
+      sales.set(key, row);
     });
   });
+
+  const salesProducts = [...sales.values()]
+    .map(row => ({
+      productId: row.productId,
+      name: row.name,
+      image: row.image,
+      photos: row.photos,
+      qty: row.qty,
+      revenue: Math.round(row.revenue * 100) / 100,
+      averagePrice: row.qty ? Math.round((row.revenue / row.qty) * 100) / 100 : 0,
+      orderCount: row.orderIds.size
+    }))
+    .sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
+  const items = salesProducts.reduce((sum, row) => sum + row.qty, 0);
+  const salesRevenue = Math.round(salesProducts.reduce((sum, row) => sum + row.revenue, 0) * 100) / 100;
 
   res.json({
     orders: db.orders.length,
     products: db.products.length,
     customers: new Set([...Object.keys(db.profiles), ...db.orders.map(order => order.uid)]).size,
     active: activeOrders.length,
-    revenue: Math.round(activeOrders.reduce((sum, order) => sum + order.total, 0) * 100) / 100,
-    items: Object.values(soldByName).reduce((sum, qty) => sum + qty, 0),
+    revenue: Math.round(activeOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) * 100) / 100,
+    items,
+    salesRevenue,
+    salesOrders: activeOrders.length,
     reviews: db.reviews.length,
-    top: Object.entries(soldByName)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, qty]) => ({ name, qty }))
+    top: salesProducts.slice(0, 10),
+    salesProducts
   });
 });
 
