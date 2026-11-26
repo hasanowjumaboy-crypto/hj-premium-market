@@ -53,6 +53,7 @@ if (fs.existsSync(DB_FILE)) {
   save();
 }
 if (!Array.isArray(db.messages)) db.messages = [];
+if (!Array.isArray(db.botPending)) db.botPending = [];
 
 
 if (!db.demoCatalogSeeded) {
@@ -847,6 +848,126 @@ function requireBotApi(req, res, next) {
   if (suppliedOwner !== BOT_OWNER_ID) return errorResponse(res, 'Forbidden', 403);
   next();
 }
+
+
+function botProduct(id) { return db.products.find(item => item.id === Number(id)); }
+function botOrder(id) { return db.orders.find(item => item.id === Number(id)); }
+function botCodeHash(code, pendingId, ownerId) {
+  return crypto.createHmac('sha256', BOT_API_SECRET)
+    .update([String(ownerId), String(pendingId), String(code)].join(':')).digest('hex');
+}
+function cleanBotPending() {
+  const now = Date.now();
+  db.botPending = db.botPending.filter(item => item.expiresAt > now && item.attempts < 5 && !item.usedAt);
+}
+function botPreview(action) {
+  if (!action || typeof action !== 'object') throw Object.assign(new Error('Не указано действие'), {status:400});
+  if (action.type === 'update_price' || action.type === 'update_stock') {
+    const p = botProduct(action.productId);
+    if (!p) throw Object.assign(new Error('Товар не найден'), {status:404});
+    const key = action.type === 'update_price' ? 'price' : 'stock';
+    const value = Number(action.value);
+    if (!Number.isFinite(value) || value < 0 || (key === 'stock' && (!Number.isInteger(value) || value > 1000000)) || (key === 'price' && value > 1e9))
+      throw Object.assign(new Error('Некорректное новое значение'), {status:400});
+    return {action:{type:action.type,productId:p.id,value}, preview:{title:action.type==='update_price'?'Изменение цены':'Изменение остатка', target:p.name, oldValue:p[key], newValue:key==='price'?Math.round(value*100)/100:value}};
+  }
+  if (action.type === 'update_order_status' || action.type === 'cancel_order') {
+    const o = botOrder(action.orderId);
+    if (!o) throw Object.assign(new Error('Заказ не найден'), {status:404});
+    const status = action.type === 'cancel_order' ? 'Отменён' : text(action.status,30);
+    if (!STATUSES.includes(status)) throw Object.assign(new Error('Недопустимый статус заказа'), {status:400});
+    if (o.status === status) throw Object.assign(new Error('Заказ уже имеет этот статус'), {status:400});
+    return {action:{type:'update_order_status',orderId:o.id,status}, preview:{title:status==='Отменён'?'Отмена заказа':'Изменение статуса заказа',target:'Заказ №'+o.id,oldValue:o.status,newValue:status,total:o.total}};
+  }
+  if (action.type === 'create_product') {
+    const productData = readProduct(action.product || {});
+    return {action:{type:'create_product',product:productData},preview:{title:'Добавление товара',target:productData.name,price:productData.price,stock:productData.stock,category:db.categories.find(x=>x.id===productData.categoryId)?.name||'',photos:productData.photos.length}};
+  }
+  throw Object.assign(new Error('Это действие пока не поддерживается'), {status:400});
+}
+function applyBotAction(action) {
+  if (action.type === 'update_price' || action.type === 'update_stock') {
+    const p = botProduct(action.productId);
+    if (!p) throw Object.assign(new Error('Товар больше не найден'), {status:404});
+    const key = action.type === 'update_price' ? 'price' : 'stock';
+    p[key] = action.value;
+    save();
+    return {ok:true, message:key==='price'?'Цена изменена':'Остаток изменён', product:publicProduct(p)};
+  }
+  if (action.type === 'update_order_status') {
+    const order = botOrder(action.orderId);
+    if (!order) throw Object.assign(new Error('Заказ больше не найден'), {status:404});
+    const status = action.status;
+    const wasCancelled = order.status === 'Отменён';
+    const willBeCancelled = status === 'Отменён';
+    if (willBeCancelled && !wasCancelled) {
+      const canReturnToStock = !['Отправлен','В пути','Доставлен'].includes(order.status);
+      if (canReturnToStock) for (const item of order.items || []) {
+        const product = botProduct(item.productId); if (product) product.stock += Number(item.qty || 0);
+      }
+      order.stockRestoredOnCancel = canReturnToStock;
+    }
+    if (wasCancelled && !willBeCancelled && order.stockRestoredOnCancel !== false) {
+      const required=(order.items||[]).map(item=>[botProduct(item.productId),Number(item.qty||0)]);
+      if(required.some(([product,qty])=>!product||product.stock<qty))
+        throw Object.assign(new Error('Недостаточно товара на складе для восстановления заказа'),{status:409});
+      required.forEach(([product,qty])=>{product.stock-=qty;});
+      order.stockRestoredOnCancel=false;
+    }
+    order.status=status;
+    if(willBeCancelled){order.cancelReason='Отменён владельцем';order.cancelledAt=order.cancelledAt||new Date().toISOString();order.cancelledBy='Администратор';}
+    else {order.cancelReason='';order.cancelledAt='';order.cancelledBy='';}
+    save();
+    return {ok:true,message:'Статус заказа изменён',order:{id:order.id,status:order.status,total:order.total}};
+  }
+  if (action.type === 'create_product') {
+    const product={id:nextId(),...action.product};
+    db.products.push(product); save();
+    return {ok:true,message:'Товар добавлен',product:publicProduct(product)};
+  }
+  throw Object.assign(new Error('Неизвестное действие'),{status:400});
+}
+app.get('/api/bot/catalog', requireBotApi, (req,res) => {
+  res.json({categories:db.categories.map(x=>({id:x.id,name:x.name})),products:db.products.map(p=>({id:p.id,name:p.name,price:p.price,stock:p.stock,categoryId:p.categoryId,category:db.categories.find(x=>x.id===p.categoryId)?.name||''})),orders:db.orders.slice(-100).reverse().map(o=>({id:o.id,status:o.status,total:o.total,date:o.date,items:(o.items||[]).map(i=>({name:i.name,qty:i.qty}))})),statuses:STATUSES});
+});
+app.post('/api/bot/prepare', requireBotApi, (req,res) => {
+  try {
+    cleanBotPending();
+    const ownerId=String(req.get('x-hj-owner-id')||'');
+    const {action,preview}=botPreview(req.body?.action);
+    const pendingId=crypto.randomBytes(16).toString('hex');
+    const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+    db.botPending.push({id:pendingId,ownerId,action,preview,codeHash:botCodeHash(code,pendingId,ownerId),createdAt:Date.now(),expiresAt:Date.now()+5*60*1000,attempts:0});
+    db.botPending=db.botPending.slice(-20);
+    save();
+    res.json({pendingId,code,preview,expiresInSeconds:300});
+  } catch(error) { errorResponse(res,error.message||'Не удалось подготовить действие',error.status||400); }
+});
+app.post('/api/bot/confirm', requireBotApi, (req,res) => {
+  cleanBotPending();
+  const ownerId=String(req.get('x-hj-owner-id')||'');
+  const pending=db.botPending.find(x=>x.id===String(req.body?.pendingId||'')&&x.ownerId===ownerId&&!x.usedAt);
+  if(!pending) return errorResponse(res,'Подтверждение не найдено или срок истёк',404);
+  const code=String(req.body?.code||'');
+  if(!/^\\d{6}$/.test(code)||!crypto.timingSafeEqual(Buffer.from(botCodeHash(code,pending.id,ownerId)),Buffer.from(pending.codeHash))) {
+    pending.attempts=(pending.attempts||0)+1; if(pending.attempts>=5) pending.usedAt=Date.now(); save();
+    return errorResponse(res,'Неверный код. Осталось попыток: '+Math.max(0,5-pending.attempts),401);
+  }
+  try {
+    // Re-check that the target still has the exact state shown in the preview.
+    if(pending.action.type==='update_price'||pending.action.type==='update_stock') {
+      const p=botProduct(pending.action.productId), key=pending.action.type==='update_price'?'price':'stock';
+      if(!p||p[key]!==pending.preview.oldValue) return errorResponse(res,'Данные товара изменились. Подготовьте действие заново',409);
+    }
+    if(pending.action.type==='update_order_status') {
+      const o=botOrder(pending.action.orderId);
+      if(!o||o.status!==pending.preview.oldValue) return errorResponse(res,'Статус заказа изменился. Подготовьте действие заново',409);
+    }
+    const result=applyBotAction(pending.action);
+    pending.usedAt=Date.now(); save();
+    res.json(result);
+  } catch(error) { errorResponse(res,error.message||'Не удалось выполнить действие',error.status||400); }
+});
 
 app.get('/api/bot/overview', requireBotApi, (req, res) => {
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
