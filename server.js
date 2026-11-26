@@ -204,6 +204,19 @@ function identifyCustomer(req, res, next) {
   next();
 }
 
+function identifyChatCustomer(req, res, next) {
+  const deviceId = String(req.headers['x-device-id'] || '');
+  if (!/^[a-f0-9]{32}$/.test(deviceId)) return errorResponse(res, 'Нет идентификатора устройства', 401);
+  const uid = 'web:' + hash(deviceId).toString('hex').slice(0, 32);
+  const telegram = telegramUser(req.headers['x-tg-init-data']);
+  if (!db.messages.some(item => item.uid === uid) && telegram) {
+    const legacy = db.messages.find(item => item.uid === 'tg:' + telegram.id);
+    if (legacy) { legacy.uid = uid; (legacy.messages || []).forEach(message => { message.uid = uid; }); save(); }
+  }
+  req.uid = uid;
+  next();
+}
+
 function customerName(req) {
   const profile = db.profiles[req.uid] || {};
   return text(
@@ -419,11 +432,11 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
 });
 
 // Переписка покупателя с магазином.
-app.get('/api/chat', identifyCustomer, (req, res) => {
+app.get('/api/chat', identifyChatCustomer, (req, res) => {
   const chat = db.messages.find(item => item.uid === req.uid);
   res.json({ messages: chat?.messages || [], subject: chat?.subject || '' });
 });
-app.post('/api/chat', identifyCustomer, (req, res) => {
+app.post('/api/chat', identifyChatCustomer, (req, res) => {
   const body = req.body || {}; const messageText = text(body.text, 2000);
   let image = ''; if (body.image) image = saveImage(body.image);
   if (!messageText && !image) return errorResponse(res, 'Напишите сообщение или прикрепите фото');
