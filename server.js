@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const BOT_API_SECRET = process.env.BOT_API_SECRET || '';
+const BOT_OWNER_ID = String(process.env.BOT_OWNER_ID || '').trim();
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CURRENCY = process.env.CURRENCY || 'сомони';
 const DATA_DIR =
@@ -836,12 +837,14 @@ app.post('/api/admin/passkey/auth/verify', async (req, res) => {
 
 function requireBotApi(req, res, next) {
   const supplied = String(req.get('x-hj-bot-secret') || '');
-  if (!BOT_API_SECRET) return errorResponse(res, 'Bot API is not configured', 503);
+  const suppliedOwner = String(req.get('x-hj-owner-id') || '').trim();
+  if (!BOT_API_SECRET || !/^\\d+$/.test(BOT_OWNER_ID)) return errorResponse(res, 'Bot API is not configured', 503);
   const a = Buffer.from(supplied);
   const expected = Buffer.from(BOT_API_SECRET);
   if (a.length !== expected.length || !crypto.timingSafeEqual(a, expected)) {
     return errorResponse(res, 'Forbidden', 403);
   }
+  if (suppliedOwner !== BOT_OWNER_ID) return errorResponse(res, 'Forbidden', 403);
   next();
 }
 
