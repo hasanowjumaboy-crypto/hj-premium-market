@@ -879,6 +879,21 @@ function botPreview(action) {
     if (o.status === status) throw Object.assign(new Error('Заказ уже имеет этот статус'), {status:400});
     return {action:{type:'update_order_status',orderId:o.id,status}, preview:{title:status==='Отменён'?'Отмена заказа':'Изменение статуса заказа',target:'Заказ №'+o.id,oldValue:o.status,newValue:status,total:o.total}};
   }
+  if (action.type === 'set_discount') {
+    const p = botProduct(action.productId);
+    const percent = Number(action.percent);
+    if (!p) throw Object.assign(new Error('Товар не найден'), {status:404});
+    if (!Number.isInteger(percent) || percent < 1 || percent > 90) throw Object.assign(new Error('Скидка должна быть от 1 до 90 процентов'), {status:400});
+    const basePrice = Number(p.regularPrice ?? p.price);
+    const discounted = Math.round(basePrice * (1 - percent / 100) * 100) / 100;
+    return {action:{type:'set_discount',productId:p.id,percent},preview:{title:'Включение скидки',target:p.name,oldValue:p.price,newValue:discounted,percent}};
+  }
+  if (action.type === 'disable_discount') {
+    const p = botProduct(action.productId);
+    if (!p) throw Object.assign(new Error('Товар не найден'), {status:404});
+    if (!p.discountPercent || !Number.isFinite(Number(p.regularPrice))) throw Object.assign(new Error('У этого товара нет активной скидки'), {status:400});
+    return {action:{type:'disable_discount',productId:p.id},preview:{title:'Отключение скидки',target:p.name,oldValue:p.price,newValue:p.regularPrice}};
+  }
   if (action.type === 'create_product') {
     const productData = readProduct(action.product || {});
     return {action:{type:'create_product',product:productData},preview:{title:'Добавление товара',target:productData.name,price:productData.price,stock:productData.stock,category:db.categories.find(x=>x.id===productData.categoryId)?.name||'',photos:productData.photos.length}};
@@ -891,6 +906,7 @@ function applyBotAction(action) {
     if (!p) throw Object.assign(new Error('Товар больше не найден'), {status:404});
     const key = action.type === 'update_price' ? 'price' : 'stock';
     p[key] = action.value;
+    if (key === 'price') { delete p.regularPrice; delete p.discountPercent; }
     save();
     return {ok:true, message:key==='price'?'Цена изменена':'Остаток изменён', product:publicProduct(p)};
   }
@@ -919,6 +935,25 @@ function applyBotAction(action) {
     else {order.cancelReason='';order.cancelledAt='';order.cancelledBy='';}
     save();
     return {ok:true,message:'Статус заказа изменён',order:{id:order.id,status:order.status,total:order.total}};
+  }
+  if (action.type === 'set_discount') {
+    const p=botProduct(action.productId);
+    if (!p) throw Object.assign(new Error('Товар больше не найден'),{status:404});
+    const basePrice=Number(p.regularPrice ?? p.price);
+    p.regularPrice=basePrice;
+    p.discountPercent=action.percent;
+    p.price=Math.round(basePrice*(1-action.percent/100)*100)/100;
+    save();
+    return {ok:true,message:'Скидка включена',product:publicProduct(p)};
+  }
+  if (action.type === 'disable_discount') {
+    const p=botProduct(action.productId);
+    if (!p || !p.discountPercent || !Number.isFinite(Number(p.regularPrice))) throw Object.assign(new Error('Активная скидка не найдена'),{status:409});
+    p.price=Number(p.regularPrice);
+    delete p.regularPrice;
+    delete p.discountPercent;
+    save();
+    return {ok:true,message:'Скидка отключена',product:publicProduct(p)};
   }
   if (action.type === 'create_product') {
     const product={id:nextId(),...action.product};
