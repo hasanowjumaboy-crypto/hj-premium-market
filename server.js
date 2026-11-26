@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const BOT_API_SECRET = process.env.BOT_API_SECRET || '';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CURRENCY = process.env.CURRENCY || 'сомони';
 const DATA_DIR =
@@ -830,6 +831,74 @@ app.post('/api/admin/passkey/auth/verify', async (req, res) => {
     console.error('Passkey authentication verification:', error);
     errorResponse(res, 'Не удалось подтвердить вход по отпечатку', 401);
   }
+});
+
+
+function requireBotApi(req, res, next) {
+  const supplied = String(req.get('x-hj-bot-secret') || '');
+  if (!BOT_API_SECRET) return errorResponse(res, 'Bot API is not configured', 503);
+  const a = Buffer.from(supplied);
+  const expected = Buffer.from(BOT_API_SECRET);
+  if (a.length !== expected.length || !crypto.timingSafeEqual(a, expected)) {
+    return errorResponse(res, 'Forbidden', 403);
+  }
+  next();
+}
+
+app.get('/api/bot/overview', requireBotApi, (req, res) => {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const localToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+  const date = datePattern.test(String(req.query.date || '')) ? String(req.query.date) : localToday;
+  const ordersToday = db.orders.filter(order => String(order.date || '').slice(0, 10) === date);
+  const delivered = ordersToday.filter(order => order.status === 'Доставлен');
+  const cancelled = ordersToday.filter(order => order.status === 'Отменён');
+  const active = ordersToday.filter(order => order.status !== 'Отменён');
+  const sum = rows => Math.round(rows.reduce((total, order) => total + Number(order.total || 0), 0) * 100) / 100;
+  const sold = new Map();
+  for (const order of delivered) {
+    for (const item of (Array.isArray(order.items) ? order.items : [])) {
+      const key = String(item.productId || item.name || 'unknown');
+      const row = sold.get(key) || { productId: item.productId || null, name: item.name || 'Товар', qty: 0, revenue: 0 };
+      const qty = Math.max(0, Number(item.qty) || 0);
+      row.qty += qty;
+      row.revenue += Math.max(0, Number(item.price) || 0) * qty;
+      sold.set(key, row);
+    }
+  }
+  const topProducts = [...sold.values()]
+    .map(row => ({ ...row, revenue: Math.round(row.revenue * 100) / 100 }))
+    .sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
+  const products = db.products.map(product => ({
+    id: product.id, name: product.name, price: product.price,
+    stock: product.stock, category: db.categories.find(c => c.id === product.categoryId)?.name || '',
+    sold: soldCount(product.id)
+  }));
+  res.json({
+    date,
+    today: {
+      orders: ordersToday.length,
+      delivered: delivered.length,
+      cancelled: cancelled.length,
+      active: active.length,
+      revenueDelivered: sum(delivered),
+      revenueWithoutCancelled: sum(active),
+      deliveredItems: delivered.reduce((n, order) => n + (order.items || []).reduce((m, item) => m + Math.max(0, Number(item.qty) || 0), 0), 0)
+    },
+    inventory: {
+      products: products.length,
+      unitsInStock: products.reduce((n, product) => n + Math.max(0, Number(product.stock) || 0), 0),
+      outOfStock: products.filter(product => Number(product.stock) === 0).length,
+      lowStock: products.filter(product => Number(product.stock) > 0 && Number(product.stock) <= 3).length
+    },
+    products,
+    topProducts,
+    recentOrders: [...ordersToday].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 25).map(order => ({
+      id: order.id, status: order.status, total: order.total, date: order.date,
+      items: (order.items || []).map(item => ({ name: item.name, qty: item.qty, price: item.price }))
+    }))
+  });
 });
 
 const admin = express.Router();
