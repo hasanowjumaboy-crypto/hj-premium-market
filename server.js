@@ -969,7 +969,7 @@ function applyBotAction(action) {
   throw Object.assign(new Error('Неизвестное действие'),{status:400});
 }
 app.get('/api/bot/catalog', requireBotApi, (req,res) => {
-  res.json({categories:db.categories.map(x=>({id:x.id,name:x.name})),products:db.products.map(p=>({id:p.id,name:p.name,price:p.price,stock:p.stock,categoryId:p.categoryId,category:db.categories.find(x=>x.id===p.categoryId)?.name||''})),orders:db.orders.slice(-100).reverse().map(o=>({id:o.id,status:o.status,total:o.total,date:o.date,items:(o.items||[]).map(i=>({name:i.name,qty:i.qty}))})),statuses:STATUSES});
+  res.json({categories:db.categories.map(x=>({id:x.id,name:x.name})),products:db.products.map(p=>({id:p.id,name:p.name,price:p.price,regularPrice:p.discountPercent?Number(p.regularPrice):null,discountPercent:Number(p.discountPercent)||0,discountReason:p.discountPercent?(p.discountReason||''):'',stock:p.stock,categoryId:p.categoryId,category:db.categories.find(x=>x.id===p.categoryId)?.name||''})),orders:db.orders.slice(-100).reverse().map(o=>({id:o.id,status:o.status,total:o.total,date:o.date,items:(o.items||[]).map(i=>({name:i.name,qty:i.qty}))})),statuses:STATUSES});
 });
 app.post('/api/bot/prepare', requireBotApi, (req,res) => {
   try {
@@ -1047,9 +1047,22 @@ app.get('/api/bot/overview', requireBotApi, (req, res) => {
     .sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
   const products = db.products.map(product => ({
     id: product.id, name: product.name, price: product.price,
+    regularPrice: product.discountPercent ? Number(product.regularPrice) : null,
+    discountPercent: Number(product.discountPercent) || 0,
+    discountReason: product.discountPercent ? (product.discountReason || '') : '',
+    isDiscounted: Number(product.discountPercent) > 0 && Number(product.regularPrice) > Number(product.price),
     stock: product.stock, category: db.categories.find(c => c.id === product.categoryId)?.name || '',
     sold: soldCount(product.id)
   }));
+  const discountedProducts = products.filter(product => product.isDiscounted);
+  const discountSummary = {
+    count: discountedProducts.length,
+    products: discountedProducts.map(product => ({
+      name: product.name, regularPrice: product.regularPrice, price: product.price,
+      discountPercent: product.discountPercent, discountReason: product.discountReason,
+      stock: product.stock, category: product.category
+    }))
+  };
   res.json({
     date,
     today: {
@@ -1065,8 +1078,10 @@ app.get('/api/bot/overview', requireBotApi, (req, res) => {
       products: products.length,
       unitsInStock: products.reduce((n, product) => n + Math.max(0, Number(product.stock) || 0), 0),
       outOfStock: products.filter(product => Number(product.stock) === 0).length,
-      lowStock: products.filter(product => Number(product.stock) > 0 && Number(product.stock) <= 3).length
+      lowStock: products.filter(product => Number(product.stock) > 0 && Number(product.stock) <= 3).length,
+      discountedProducts: discountSummary.count
     },
+    discounts: discountSummary,
     products,
     topProducts,
     recentOrders: [...ordersToday].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 25).map(order => ({
