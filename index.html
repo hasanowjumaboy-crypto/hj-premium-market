@@ -185,8 +185,15 @@ async function adminApi(path,opts={}){return api('/api/admin'+path,opts,'admin')
 async function adminShowRevenue(){
  try{const d=await adminApi('/orders');const orders=Array.isArray(d)?d:(d.orders||[]);const active=orders.filter(o=>o.status!=='Отменён');const modal=document.createElement('div');modal.className='modalback';modal.innerHTML=`<div class="modal"><div class="modalhead"><h3>Подробная выручка</h3><button class="close">×</button></div><h2>${money(active.reduce((s,o)=>s+Number(o.total||0),0))}</h2><p class="notice">Отменённые заказы не включены в расчёт.</p>${active.length?active.map(o=>`<div class="adminitem"><b>Заказ №${esc(o.id)}</b><p>${esc(o.name||'Покупатель')} · ${esc(o.date||'')}</p><p>${esc(o.status)} · <b>${money(o.total)}</b></p></div>`).join(''):'<div class="empty">Пока нет оплачиваемых заказов</div>'}</div>`;document.body.append(modal);$('.close',modal).onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove()}}catch(e){toast(e.message)}
 }
-function adminShowTopItems(items){
- const modal=document.createElement('div');modal.className='modalback';modal.innerHTML=`<div class="modal"><div class="modalhead"><h3>Проданные товары</h3><button class="close">×</button></div>${items.length?items.map((x,i)=>`<div class="adminitem"><b>${i+1}. ${esc(x.name)}</b><p>Продано: ${esc(x.qty)} шт.</p></div>`).join(''):'<div class="empty">Пока нет продаж</div>'}</div>`;document.body.append(modal);$('.close',modal).onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove()}
+function adminShowTopItems(items,summary={}){
+ const list=Array.isArray(items)?items:[],totalQty=list.reduce((s,x)=>s+Number(x.qty||0),0),totalRevenue=list.reduce((s,x)=>s+Number(x.revenue||0),0),totalOrders=Number(summary.salesOrders||0);
+ const modal=document.createElement('div');modal.className='modalback';
+ modal.innerHTML=`<div class="modal" style="max-height:92vh;overflow:auto"><div class="modalhead"><h3>Статистика продаж товаров</h3><button class="close" aria-label="Закрыть">×</button></div>
+ <div class="adminstats" style="margin:12px 0"><div class="stat"><span class="muted">Продано единиц</span><strong>${esc(totalQty)}</strong></div><div class="stat"><span class="muted">Заказов без отмены</span><strong>${esc(totalOrders)}</strong></div><div class="stat"><span class="muted">Сумма продаж товаров</span><strong>${money(totalRevenue)}</strong></div></div>
+ <p class="notice">Отменённые заказы не учитываются. Для каждого товара показаны фото, количество, средняя цена за штуку и общая сумма продаж.</p>
+ ${list.length?list.map((x,i)=>`<div class="adminitem" style="display:flex;gap:12px;align-items:center">${x.image?`<img src="${esc(x.image)}" alt="${esc(x.name)}" style="width:88px;height:88px;flex:0 0 88px;object-fit:contain;background:#f6f6f6;border-radius:10px;float:none">`:'<div style="width:88px;height:88px;flex:0 0 88px;background:#f3f4f6;border-radius:10px;display:grid;place-items:center">Нет фото</div>'}<div style="min-width:0;flex:1"><b>${i+1}. ${esc(x.name)}</b><p style="margin:5px 0">Продано: <b>${esc(x.qty)} шт.</b></p><p style="margin:3px 0">Средняя цена: ${money(x.averagePrice)}</p><p style="margin:3px 0">Заказов с товаром: ${esc(x.orderCount||0)}</p><p style="margin:5px 0 0"><b>Итого за товар: ${money(x.revenue)}</b></p></div></div>`).join(''):'<div class="empty">Пока нет продаж</div>'}
+ <h2 style="text-align:right;margin-top:16px">Общая сумма: ${money(totalRevenue)}</h2></div>`;
+ document.body.append(modal);$('.close',modal).onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove()}
 }
 function adminOrderedProductDetails(item){
  if(!item)return;const photos=[...new Set([...(Array.isArray(item.photos)?item.photos:[]),item.image].filter(Boolean))],modal=document.createElement('div');modal.className='modalback';
@@ -238,7 +245,7 @@ async function loadAdminTab(){const el=$('#adminContent');if(!el)return;try{if(s
   const key=b.dataset.overview;
   if(['orders','products','customers','reviews','active'].includes(key)){state.adminTab=key==='active'?'orders':key;renderAdmin();return}
   if(key==='revenue'){await adminShowRevenue();return}
-  if(key==='items'){adminShowTopItems(d.top||[])}
+  if(key==='items'){adminShowTopItems(d.salesProducts||d.top||[],d)}
  });
 }else if(state.adminTab==='orders'){
  const d=await adminApi('/orders'),a=Array.isArray(d)?d:(d.orders||[]);
