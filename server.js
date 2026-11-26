@@ -999,6 +999,10 @@ app.post('/api/bot/confirm', requireBotApi, (req,res) => {
       const o=botOrder(pending.action.orderId);
       if(!o||o.status!==pending.preview.oldValue) return errorResponse(res,'Статус заказа изменился. Подготовьте действие заново',409);
     }
+    if(pending.action.type==='set_discount'||pending.action.type==='disable_discount') {
+      const p=botProduct(pending.action.productId);
+      if(!p||p.price!==pending.preview.oldValue) return errorResponse(res,'Цена товара изменилась. Подготовьте действие заново',409);
+    }
     const result=applyBotAction(pending.action);
     pending.usedAt=Date.now(); save();
     res.json(result);
