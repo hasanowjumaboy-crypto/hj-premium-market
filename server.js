@@ -318,6 +318,105 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '45mb' }));
 
+const TELEGRAM_WEB_APP_URL = 'https://hj-premium-market-production.up.railway.app';
+const TELEGRAM_WEBHOOK_URL = TELEGRAM_WEB_APP_URL + '/telegram/webhook';
+// Отдельный секрет webhook производим из серверного секрета, токен бота не раскрывается.
+const TELEGRAM_WEBHOOK_SECRET = crypto
+  .createHmac('sha256', SECRET)
+  .update('hj-premium-market-telegram-webhook')
+  .digest('hex');
+
+async function telegramApi(method, payload) {
+  if (!BOT_TOKEN) throw new Error('Telegram bot token is not configured');
+  const response = await fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/' + method, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    // Не выводим URL запроса: он содержит секретный токен бота.
+    throw new Error('Telegram API ' + method + ' failed: ' + text(result.description || response.statusText, 180));
+  }
+  return result.result;
+}
+
+async function configureTelegramBot() {
+  if (!BOT_TOKEN) return;
+  try {
+    await telegramApi('setWebhook', {
+      url: TELEGRAM_WEBHOOK_URL,
+      secret_token: TELEGRAM_WEBHOOK_SECRET,
+      allowed_updates: ['message'],
+      drop_pending_updates: false
+    });
+    await telegramApi('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: 'Открыть магазин',
+        web_app: { url: TELEGRAM_WEB_APP_URL }
+      }
+    });
+    console.log('Telegram-бот подключён: webhook и кнопка меню настроены.');
+  } catch (error) {
+    console.error('Не удалось настроить Telegram-бота:', error.message);
+  }
+}
+
+async function sendTelegramStart(chatId, firstName = '') {
+  const name = text(firstName, 40);
+  const greeting = name ? ', ' + name : '';
+  return telegramApi('sendMessage', {
+    chat_id: chatId,
+    text: 'Здравствуйте' + greeting + '! Добро пожаловать в HJ PREMIUM MARKET. Нажмите кнопку ниже, чтобы открыть магазин, посмотреть товары и оформить заказ.',
+    reply_markup: {
+      inline_keyboard: [[{
+        text: '🛍 Открыть магазин',
+        web_app: { url: TELEGRAM_WEB_APP_URL }
+      }]]
+    }
+  });
+}
+
+// Telegram webhook: отвечает на /start и /help, остальные обновления безопасно подтверждает.
+app.post('/telegram/webhook', async (req, res) => {
+  const suppliedSecret = String(req.headers['x-telegram-bot-api-secret-token'] || '');
+  const expected = Buffer.from(TELEGRAM_WEBHOOK_SECRET);
+  const received = Buffer.from(suppliedSecret);
+  if (!suppliedSecret || received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+    return res.sendStatus(401);
+  }
+
+  res.sendStatus(200);
+  const message = req.body?.message;
+  const chatId = message?.chat?.id;
+  const command = String(message?.text || '').trim().split(/\\s+/, 1)[0].split('@')[0].toLowerCase();
+  if (!chatId) return;
+
+  if (command === '/start' || command === '/start@hj_premium_market_bot') {
+    try {
+      await sendTelegramStart(chatId, message.from?.first_name || '');
+    } catch (error) {
+      console.error('Не удалось отправить приветствие Telegram:', error.message);
+    }
+  } else if (command === '/help') {
+    try {
+      await telegramApi('sendMessage', {
+        chat_id: chatId,
+        text: 'Чтобы перейти к товарам и заказам, нажмите «Открыть магазин» внизу чата или кнопку ниже.',
+        reply_markup: {
+          inline_keyboard: [[{
+            text: '🛍 Открыть магазин',
+            web_app: { url: TELEGRAM_WEB_APP_URL }
+          }]]
+        }
+      });
+    } catch (error) {
+      console.error('Не удалось отправить помощь Telegram:', error.message);
+    }
+  }
+});
+
 // Проверка состояния сервера
 app.get('/health', (req, res) => {
   res.status(200).json({ ok: true, service: 'HJ PREMIUM MARKET' });
@@ -1065,6 +1164,7 @@ app.listen(PORT, '0.0.0.0', () => {
   if (!BOT_TOKEN) {
     console.warn('TELEGRAM_BOT_TOKEN не задан — проверка входа Telegram отключена.');
   }
+  if (BOT_TOKEN) configureTelegramBot();
   if (process.env.RAILWAY_ENVIRONMENT && !process.env.DATA_DIR && !process.env.RAILWAY_VOLUME_MOUNT_PATH) {
     console.warn('ВНИМАНИЕ: Railway Volume не подключён — данные могут пропасть при новом деплое.');
   }
