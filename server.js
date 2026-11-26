@@ -353,7 +353,7 @@ async function configureTelegramBot() {
     await telegramApi('setChatMenuButton', {
       menu_button: {
         type: 'web_app',
-        text: 'Открыть магазин',
+        text: '🛍 Магазин',
         web_app: { url: TELEGRAM_WEB_APP_URL }
       }
     });
