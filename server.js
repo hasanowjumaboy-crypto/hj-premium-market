@@ -937,6 +937,7 @@ app.post('/api/bot/prepare', requireBotApi, (req,res) => {
     const {action,preview}=botPreview(req.body?.action);
     const pendingId=crypto.randomBytes(16).toString('hex');
     const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+    db.botPending = db.botPending.filter(item => item.ownerId !== ownerId || item.usedAt);
     db.botPending.push({id:pendingId,ownerId,action,preview,codeHash:botCodeHash(code,pendingId,ownerId),createdAt:Date.now(),expiresAt:Date.now()+5*60*1000,attempts:0});
     db.botPending=db.botPending.slice(-20);
     save();
@@ -946,7 +947,7 @@ app.post('/api/bot/prepare', requireBotApi, (req,res) => {
 app.post('/api/bot/confirm', requireBotApi, (req,res) => {
   cleanBotPending();
   const ownerId=String(req.get('x-hj-owner-id')||'');
-  const pending=db.botPending.find(x=>x.id===String(req.body?.pendingId||'')&&x.ownerId===ownerId&&!x.usedAt);
+  const pending=[...db.botPending].reverse().find(x=>x.ownerId===ownerId&&!x.usedAt);
   if(!pending) return errorResponse(res,'Подтверждение не найдено или срок истёк',404);
   const code=String(req.body?.code||'');
   if(!/^\\d{6}$/.test(code)||!crypto.timingSafeEqual(Buffer.from(botCodeHash(code,pending.id,ownerId)),Buffer.from(pending.codeHash))) {
