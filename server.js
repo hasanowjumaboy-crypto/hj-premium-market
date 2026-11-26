@@ -454,6 +454,7 @@ app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
   order.cancelReason = text(req.body?.cancelReason, 300);
   order.cancelledAt = new Date().toISOString();
   order.cancelledBy = 'Покупатель';
+  order.stockRestoredOnCancel = true;
   save();
   res.json({ ok: true, order });
 });
@@ -767,12 +768,16 @@ admin.put('/orders/:id', (req, res) => {
   const wasCancelled = order.status === 'Отменён';
   const willBeCancelled = status === 'Отменён';
   if (willBeCancelled && !wasCancelled) {
-    for (const item of order.items || []) {
-      const product = db.products.find(product => product.id === item.productId);
-      if (product) product.stock += Number(item.qty || 0);
+    const canReturnToStock = !['Отправлен', 'В пути', 'Доставлен'].includes(order.status);
+    if (canReturnToStock) {
+      for (const item of order.items || []) {
+        const product = db.products.find(product => product.id === item.productId);
+        if (product) product.stock += Number(item.qty || 0);
+      }
     }
+    order.stockRestoredOnCancel = canReturnToStock;
   }
-  if (wasCancelled && !willBeCancelled) {
+  if (wasCancelled && !willBeCancelled && order.stockRestoredOnCancel !== false) {
     const required = (order.items || []).map(item => [
       db.products.find(product => product.id === item.productId),
       Number(item.qty || 0)
@@ -781,6 +786,7 @@ admin.put('/orders/:id', (req, res) => {
       return errorResponse(res, 'Не хватает товара на складе, чтобы вернуть заказ в работу. Проверьте остатки товаров');
     }
     required.forEach(([product, qty]) => { product.stock -= qty; });
+    order.stockRestoredOnCancel = false;
   }
   order.status = status;
   if (willBeCancelled) {
