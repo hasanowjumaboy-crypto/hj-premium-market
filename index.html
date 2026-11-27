@@ -154,8 +154,8 @@ function profileView(){
 }
 function render(){
  const root=$('#root');if(location.pathname==='/admin'){renderAdmin(true);return}
- let content=state.view==='cart'?cartView():state.view==='profile'?profileView():state.view==='catalog'?catalogView():state.view==='category'?categoryView():state.view==='sale'?saleView():state.view==='product'?productDetailView():state.view==='specs'?productSpecsView():homeView();
- const cartEntries=state.view==='cart'?Object.entries(state.cart).filter(([id,q])=>q>0&&state.selected.has(id)&&state.products.some(p=>String(p.id)===String(id))):[];const cartCheckout=cartEntries.length?(()=>{const qty=cartEntries.reduce((n,[,q])=>n+Number(q||0),0);const sum=cartEntries.reduce((n,[id,q])=>{const p=state.products.find(x=>String(x.id)===String(id));return n+(p?Number(p.price)*Number(q):0)},0);return `<div class="cart-checkout-dock"><button type="button" id="checkout" ${sum<=0?'disabled':''}><span>Оформление заказа · ${qty} шт.</span><b>${money(sum)}</b></button></div>`})():'';root.innerHTML=`<div class="app">${content}</div>${state.view==='product'?(()=>{const p=state.products.find(x=>String(x.id)===String(state.detailProductId));return p?`<div class="detail-buybar"><button type="button" data-add="${esc(p.id)}" ${Number(p.stock)<=0?'disabled':''}>В корзину</button></div>`:''})():''}${cartCheckout}${nav()}`;
+ let content=state.view==='cart'?cartView():state.view==='checkout'?checkoutView():state.view==='profile'?profileView():state.view==='catalog'?catalogView():state.view==='category'?categoryView():state.view==='sale'?saleView():state.view==='product'?productDetailView():state.view==='specs'?productSpecsView():homeView();
+ const cartEntries=(state.view==='cart'||state.view==='checkout')?Object.entries(state.cart).filter(([id,q])=>q>0&&state.selected.has(id)&&state.products.some(p=>String(p.id)===String(id))):[];const cartCheckout=cartEntries.length?(()=>{const qty=cartEntries.reduce((n,[,q])=>n+Number(q||0),0);const sum=cartEntries.reduce((n,[id,q])=>{const p=state.products.find(x=>String(x.id)===String(id));return n+(p?Number(p.price)*Number(q):0)},0);return `<div class="cart-checkout-dock"><button type="button" id="checkout" ${sum<=0?'disabled':''}><span>${state.view==='checkout'?'Подтвердить заказ · ':'Оформление заказа · '}${qty} шт.</span><b>${money(sum)}</b></button></div>`})():'';root.innerHTML=`<div class="app">${content}</div>${state.view==='product'?(()=>{const p=state.products.find(x=>String(x.id)===String(state.detailProductId));return p?`<div class="detail-buybar"><button type="button" data-add="${esc(p.id)}" ${Number(p.stock)<=0?'disabled':''}>В корзину</button></div>`:''})():''}${cartCheckout}${nav()}`;
  bindCommon();bindSaleCarousel();bindCardGalleries();bindProductDetail();
  if(window.hjSaleTimer){clearInterval(window.hjSaleTimer);window.hjSaleTimer=null}
  if(state.view==='home'&&discountedProducts().length>0)window.hjSaleTimer=setInterval(updateSaleBanner,4000);
@@ -194,6 +194,7 @@ function bindCommon(){
   const orderProduct=e.target.closest('[data-order-product]');if(orderProduct){openOrderedProduct(orderProduct.dataset.orderProduct);return}
   const reviews=e.target.closest('[data-reviews]');if(reviews){openReviews(reviews.dataset.reviews);return}
   if(e.target.closest('#searchBtn')){const input=$('#search');state.search=input?input.value.trim():state.search;state.view='home';render();return}
+  if(e.target.closest('#checkoutBack')){state.view='cart';render();return}
   if(e.target.closest('#checkout')){checkout();return}
  };
  root.oninput=e=>{
@@ -321,26 +322,26 @@ function openOrderDetails(order){
  const cancel=$('#cancelMyOrder',modal);if(cancel)cancel.onclick=async()=>{if(!confirm('Отменить этот заказ?'))return;const reason=prompt('Причина отмены (необязательно):','');cancel.disabled=true;try{await api('/api/orders/'+encodeURIComponent(order.id)+'/cancel',{method:'POST',body:JSON.stringify({cancelReason:reason===null?'':reason.trim()})},'customer');toast('Заказ отменён');modal.remove();loadMyOrders()}catch(e){toast(e.message);cancel.disabled=false}};
 }
 async function checkout(){
- const items=Object.entries(state.cart)
-  .filter(([id,q])=>state.selected.has(String(id))&&Number(q)>0)
-  .map(([id,qty])=>({id:Number(id),qty:Number(qty),...(state.selectedSizes[id]?{size:state.selectedSizes[id]}:{})}));
- if(!items.length){toast('Выберите товары для заказа');return}
+ const items=Object.entries(state.cart).filter(([id,q])=>state.selected.has(String(id))&&Number(q)>0).map(([id,qty])=>({id:Number(id),qty:Number(qty),...(state.selectedSizes[id]?{size:state.selectedSizes[id]}:{})}));
+ if(!items.length){toast('Выберите товары для заказа');state.view='cart';render();return}
  try{
-  const profileResponse=await api('/api/profile',{},'customer');
-  const profile=profileResponse.profile||profileResponse;
-  state.profile=profile;
-  if(!profile.firstName||!profile.phone||!profile.gender||!profile.age||!profile.address){
-   state.view='profile';render();
-   toast('Заполните адрес доставки и сохраните профиль перед заказом');
-   return;
-  }
+  if(state.view!=='checkout'){const profileResponse=await api('/api/profile',{},'customer');state.profile=profileResponse.profile||profileResponse||{};state.view='checkout';render();window.scrollTo({top:0,behavior:'instant'});return}
+  const phone=String($('#checkoutPhone')?.value||state.profile?.phone||'').trim();
+  const address=String($('#checkoutAddress')?.value||state.profile?.address||'').trim();
+  if(!phone){toast('Укажите номер телефона');$('#checkoutPhone')?.focus();return}
+  if(!/^\\+?[0-9 ()-]{7,20}$/.test(phone)){toast('Проверьте номер телефона');$('#checkoutPhone')?.focus();return}
+  if(!address){toast('Укажите адрес доставки');$('#checkoutAddress')?.focus();return}
+  const saved=await api('/api/profile',{method:'PUT',body:JSON.stringify({phone,address})},'customer');state.profile=saved.profile||saved||{...state.profile,phone,address};
   const result=await api('/api/orders',{method:'POST',body:JSON.stringify({items})},'customer');
-  items.forEach(item=>{delete state.cart[String(item.id)];state.selected.delete(String(item.id));delete state.selectedSizes[String(item.id)]});
-  saveCart();
-  await loadData();
-  state.view='profile';render();
-  toast('Заказ №'+(result.orderNo||result.id||'')+' успешно оформлен');
+  items.forEach(item=>{delete state.cart[String(item.id)];state.selected.delete(String(item.id));delete state.selectedSizes[String(item.id)]});saveCart();await loadData();state.view='profile';render();toast('Заказ №'+(result.orderNo||result.id||'')+' успешно оформлен');
  }catch(e){toast('Не удалось оформить заказ: '+e.message)}
+}
+function checkoutView(){
+ const p=state.profile||{};
+ const entries=Object.entries(state.cart).filter(([id,q])=>q>0&&state.selected.has(String(id)));
+ const qty=entries.reduce((n,[,q])=>n+Number(q||0),0);
+ const total=entries.reduce((n,[id,q])=>{const product=state.products.find(x=>String(x.id)===String(id));return n+(product?Number(product.price)*Number(q):0)},0);
+ return '<section class="panel"><div class="sectionhead"><button type="button" class="secondary" id="checkoutBack">← Назад в корзину</button><span class="muted">Шаг оформления</span></div><h2>Данные доставки</h2><p class="notice">Укажите только телефон и адрес доставки. Остальные данные профиля для заказа не нужны.</p><div class="profilebox"><label class="fieldlabel" for="checkoutPhone">Номер телефона *</label><input class="field" id="checkoutPhone" name="phone" type="tel" autocomplete="tel" placeholder="+992…" value="'+esc(p.phone||'')+'" required><label class="fieldlabel" for="checkoutAddress">Адрес доставки *</label><textarea class="field" id="checkoutAddress" name="address" rows="3" autocomplete="street-address" placeholder="Город, улица, дом, квартира" required>'+esc(p.address||'')+'</textarea><div class="notice">Телефон и адрес сохранятся в вашем профиле и в следующий раз будут уже заполнены.</div></div><div class="profilebox"><div class="totalrow"><span>Товаров: '+qty+' шт.</span><strong>'+money(total)+'</strong></div><div class="notice">После нажатия кнопки заказ сразу поступит продавцу.</div></div></section>';
 }
 function openProduct(id){
  const p=state.products.find(x=>String(x.id)===String(id));if(!p)return;
