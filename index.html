@@ -81,6 +81,8 @@
 .detail-buybar button:disabled{opacity:.5}
 body:has(.product-detail-page){padding-bottom:158px}
 @media(min-width:600px){.card-gallery{height:210px}.product-cart-float{top:192px}.detail-gallery{height:50svh}}
+
+.photo-viewer-inner{width:100%;height:100%;display:flex;flex-direction:column;color:#fff;padding:12px}.photo-viewer-head{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px}.photo-viewer-head b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.photo-viewer-head button{width:40px;height:40px;border:0;background:transparent;color:#fff;font-size:30px}.photo-viewer-stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.photo-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain}.photo-viewer-dots{display:flex;justify-content:center;gap:7px;padding:12px}.photo-viewer-dots span{width:6px;height:6px;border-radius:50%;background:#ffffff70}.photo-viewer-dots span.active{background:#fff;width:8px;height:8px}
 </style>
 </head>
 <body>
@@ -384,13 +386,13 @@ function bindProductDetail(){
 }
 function openPhotoViewer(photos,start,title){
  if(!photos.length)return;let idx=start||0;
- const viewer=document.createElement('div');viewer.className='modalback';viewer.style.zIndex='10001';viewer.style.background='rgba(0,0,0,.96)';
- viewer.innerHTML=`<div style="width:100%;height:100%;display:flex;flex-direction:column;color:#fff;padding:12px"><div style="display:flex;justify-content:space-between;align-items:center"><button id="photoClose" style="background:none;border:0;color:white;font-size:28px">←</button><b>${esc(title)}</b><span id="photoCount">${idx+1} / ${photos.length}</span></div><div style="flex:1;display:flex;align-items:center;justify-content:center;min-height:0"><img id="viewerImage" src="${esc(photos[idx])}" style="max-width:100%;max-height:100%;object-fit:contain"></div><div style="display:flex;justify-content:space-between;padding:14px"><button id="photoPrev" class="secondary">‹ Назад</button><button id="photoNext" class="secondary">Вперёд ›</button></div></div>`;
+ const viewer=document.createElement('div');viewer.className='modalback';viewer.style.zIndex='10001';viewer.style.background='rgba(0,0,0,.97)';
+ viewer.innerHTML=`<div class="photo-viewer-inner"><div class="photo-viewer-head"><button id="photoClose" aria-label="Закрыть">×</button><b>${esc(title)}</b><span id="photoCount">${idx+1} / ${photos.length}</span></div><div class="photo-viewer-stage"><img id="viewerImage" src="${esc(photos[idx])}" alt="${esc(title)}"></div>${photos.length>1?`<div class="photo-viewer-dots">${photos.map((_,i)=>`<span class="${i===idx?'active':''}"></span>`).join('')}</div>`:''}</div>`;
  document.body.append(viewer);$('#photoClose',viewer).onclick=()=>viewer.remove();
- const draw=()=>{$('#viewerImage',viewer).src=photos[idx];$('#photoCount',viewer).textContent=(idx+1)+' / '+photos.length};
- $('#photoPrev',viewer).onclick=()=>{idx=(idx+photos.length-1)%photos.length;draw()};
- $('#photoNext',viewer).onclick=()=>{idx=(idx+1)%photos.length;draw()};
- let x=0;viewer.addEventListener('touchstart',e=>x=e.changedTouches[0].clientX,{passive:true});viewer.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-x;if(Math.abs(d)>45){idx=(idx+(d<0?1:-1)+photos.length)%photos.length;draw()}},{passive:true});
+ const draw=()=>{$('#viewerImage',viewer).src=photos[idx];$('#photoCount',viewer).textContent=(idx+1)+' / '+photos.length;$$('.photo-viewer-dots span',viewer).forEach((dot,n)=>dot.classList.toggle('active',n===idx))};
+ let x=0;viewer.addEventListener('touchstart',e=>x=e.changedTouches[0].clientX,{passive:true});
+ viewer.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-x;if(Math.abs(d)>45&&photos.length>1){idx=(idx+(d<0?1:-1)+photos.length)%photos.length;draw()}},{passive:true});
+ viewer.addEventListener('click',e=>{if(e.target===viewer)viewer.remove()});
 }
 async function openReviews(id,orderId=null){
  const p=state.products.find(x=>String(x.id)===String(id));if(!p)return;let reviews=[];
