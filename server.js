@@ -122,6 +122,10 @@ function attachReferral(uid, code) {
   profile.referredAt = new Date().toISOString();
   return true;
 }
+function customerVisibleProfile(profile) {
+  const { referredBy, referredAt, telegramId, telegramUsername, ...visible } = profile || {};
+  return visible;
+}
 function publicCustomerProfile(uid, telegram = null, referralCode = '') {
   let profile = db.profiles[uid];
   let changed = false;
@@ -584,7 +588,7 @@ app.put('/api/cart', identifyCustomer, (req, res) => {
 
 app.get('/api/profile', identifyCustomer, (req, res) => {
   const profile = publicCustomerProfile(req.uid, req.telegram || null, req.referralCode || '');
-  res.json({ profile, via: req.telegram ? 'telegram' : 'web' });
+  res.json({ profile: customerVisibleProfile(profile), via: req.telegram ? 'telegram' : 'web' });
 });
 
 app.put('/api/profile', identifyCustomer, (req, res) => {
@@ -628,7 +632,7 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   ensureReferralCode(db.profiles[req.uid]);
 
   save();
-  res.json(db.profiles[req.uid]);
+  res.json(customerVisibleProfile(db.profiles[req.uid]));
 });
 
 // Переписка покупателя с магазином.
