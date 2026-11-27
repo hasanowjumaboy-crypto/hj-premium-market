@@ -22,7 +22,7 @@ const SECRET =
   process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update('hj-market:' + ADMIN_PASSWORD).digest('hex');
 
-const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Собран', 'Отправлен', 'В пути', 'Доставлен', 'Отменён'];
+const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Собран', 'Отправлен', 'В пути', 'Доставлен', 'Продано', 'Отменён'];
 
 fs.mkdirSync(UPLOADS, { recursive: true });
 
@@ -980,6 +980,7 @@ function applyBotAction(action) {
       required.forEach(([product,qty])=>{product.stock-=qty;});
       order.stockRestoredOnCancel=false;
     }
+    if (order.status !== status) { const changedAt = new Date().toISOString(); order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}]; order.statusHistory.push({status, at: changedAt}); if (status === 'Продано') order.soldAt = changedAt; else if (order.soldAt) order.soldAt = ''; }
     order.status=status;
     if(willBeCancelled){order.cancelReason='Отменён владельцем';order.cancelledAt=order.cancelledAt||new Date().toISOString();order.cancelledBy='Администратор';}
     else {order.cancelReason='';order.cancelledAt='';order.cancelledBy='';}
@@ -1238,6 +1239,30 @@ admin.get('/categories', (req, res) => {
 });
 
 admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
+
+admin.get('/sales-report', (req, res) => {
+  const validDate = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(value || ''));
+  const from = validDate(req.query.from) ? String(req.query.from) : '';
+  const to = validDate(req.query.to) ? String(req.query.to) : '';
+  const soldOrders = db.orders.filter(order => order.status === 'Продано').map(order => ({
+    ...order,
+    soldAt: order.soldAt || (Array.isArray(order.statusHistory) ? [...order.statusHistory].reverse().find(x => x.status === 'Продано')?.at : '') || order.date
+  })).filter(order => {
+    const day = String(order.soldAt || '').slice(0, 10);
+    return (!from || day >= from) && (!to || day <= to);
+  }).sort((a,b) => new Date(b.soldAt) - new Date(a.soldAt));
+  const map = new Map();
+  for (const order of soldOrders) for (const item of (order.items || [])) {
+    const key = String(item.productId || item.name || 'unknown');
+    const row = map.get(key) || {productId:item.productId || null,name:item.name || 'Товар',image:item.image || item.photos?.[0] || '',photos:item.photos || (item.image ? [item.image] : []),qty:0,revenue:0,orders:[]};
+    const qty = Math.max(0, Number(item.qty) || 0), price = Math.max(0, Number(item.price) || 0);
+    row.qty += qty; row.revenue += qty * price;
+    row.orders.push({orderId:order.id,orderNo:order.orderNo || order.id,qty,price,total:Math.round(qty*price*100)/100,soldAt:order.soldAt,statusHistory:order.statusHistory || [{status:'Продано',at:order.soldAt}]});
+    map.set(key,row);
+  }
+  const products = [...map.values()].map(row=>({...row,revenue:Math.round(row.revenue*100)/100,orders:row.orders.sort((a,b)=>new Date(b.soldAt)-new Date(a.soldAt))})).sort((a,b)=>b.revenue-a.revenue);
+  res.json({from,to,orders:soldOrders.length,totalQty:products.reduce((n,p)=>n+p.qty,0),totalRevenue:Math.round(products.reduce((n,p)=>n+p.revenue,0)*100)/100,products});
+});
 // Список отдельных чатов покупателей и их переписка.
 admin.get('/messages', (req, res) => {
  const chats = db.messages.filter(chat=>!chat.hiddenForAdmin).map(chat => {
@@ -1328,6 +1353,7 @@ admin.put('/orders/:id', (req, res) => {
     required.forEach(([product, qty]) => { product.stock -= qty; });
     order.stockRestoredOnCancel = false;
   }
+  if (order.status !== status) { const changedAt = new Date().toISOString(); order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}]; order.statusHistory.push({status, at: changedAt}); if (status === 'Продано') order.soldAt = changedAt; else if (order.soldAt) order.soldAt = ''; }
   order.status = status;
   if (willBeCancelled) {
     order.cancelReason = text(req.body?.cancelReason, 300);
