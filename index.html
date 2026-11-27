@@ -128,7 +128,8 @@ function bindCharacteristicFields(form){
 function collectCharacteristics(form){
  const result={};
  form.querySelectorAll('[data-char-key]').forEach(keyInput=>{
-  const key=String(keyInput.value||'').trim(),row=keyInput.closest('[data-custom-char-row]');
+  const row=keyInput.closest('[data-custom-char-row]');
+  const key=String(row?keyInput.value:keyInput.dataset.charKey||'').trim();
   const value=String((row?row.querySelector('[data-char-value]'):keyInput)?.value||'').trim();
   if(key&&value)result[key]=value;
  });
