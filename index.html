@@ -718,36 +718,78 @@ start();
   const hint = document.getElementById('pwa-install-hint');
   const close = document.getElementById('pwa-install-close');
   if (!banner || !action || !hint || !close) return;
+
   const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const inTelegram = Boolean(window.Telegram && window.Telegram.WebApp);
-  if (standalone || inTelegram || sessionStorage.getItem('hj_pwa_banner_closed') === '1') return;
-  let installPrompt = null;
+  const telegramApp = window.Telegram && window.Telegram.WebApp;
+  const inTelegram = Boolean(telegramApp);
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (isIOS) {
-    hint.textContent = 'На iPhone: нажмите «Поделиться» в Safari → «На экран Домой».';
-    action.textContent = 'Как установить';
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (standalone || localStorage.getItem('hj_pwa_installed') === '1' || sessionStorage.getItem('hj_pwa_banner_closed') === '1') return;
+
+  let installPrompt = null;
+  const show = (message, label) => {
+    hint.textContent = message;
+    action.textContent = label;
     banner.hidden = false;
-    action.addEventListener('click', () => alert('Откройте магазин в Safari, нажмите кнопку «Поделиться», выберите «На экран Домой», затем нажмите «Добавить».'));
+  };
+
+  if (inTelegram) {
+    show(
+      isIOS
+        ? 'Чтобы установить магазин на iPhone, откройте его в Safari, затем «Поделиться» → «На экран Домой».'
+        : 'Откройте магазин в браузере, затем в меню выберите «Установить приложение» или «Добавить на главный экран».',
+      'Открыть в браузере'
+    );
+    action.addEventListener('click', () => {
+      const url = location.href;
+      if (typeof telegramApp.openLink === 'function') telegramApp.openLink(url);
+      else window.open(url, '_blank', 'noopener');
+    });
+  } else if (isIOS) {
+    show('На iPhone откройте магазин в Safari: «Поделиться» → «На экран Домой» → «Добавить».', 'Как установить');
+    action.addEventListener('click', () => alert('Откройте эту страницу именно в Safari. Нажмите «Поделиться», выберите «На экран Домой», затем нажмите «Добавить».'));
+  } else {
+    show(
+      isAndroid
+        ? 'Добавьте магазин на главный экран через меню браузера. Если появится предложение — нажмите «Установить».'
+        : 'Добавьте HJ PREMIUM MARKET на главный экран или установите приложение из меню браузера.',
+      'Как установить'
+    );
+    action.addEventListener('click', async () => {
+      if (installPrompt) {
+        const promptEvent = installPrompt;
+        installPrompt = null;
+        await promptEvent.prompt();
+        await promptEvent.userChoice.catch(() => null);
+        banner.hidden = true;
+        return;
+      }
+      alert(isAndroid
+        ? 'Откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран». В Яндекс Браузере этот пункт также находится в меню браузера.'
+        : 'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».');
+    });
   }
+
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     installPrompt = event;
-    hint.textContent = 'Установите магазин с иконкой — он будет открываться как приложение.';
-    action.textContent = 'Установить';
-    banner.hidden = false;
+    if (!inTelegram && !isIOS) {
+      hint.textContent = 'Установите магазин с иконкой — он будет открываться как приложение.';
+      action.textContent = 'Установить';
+      banner.hidden = false;
+    }
   });
-  action.addEventListener('click', async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    await installPrompt.userChoice.catch(() => null);
-    installPrompt = null;
-    banner.hidden = true;
-  });
+
   close.addEventListener('click', () => {
     banner.hidden = true;
-    sessionStorage.setItem('hj_pwa_banner_closed','1');
+    sessionStorage.setItem('hj_pwa_banner_closed', '1');
   });
-  window.addEventListener('appinstalled', () => { banner.hidden = true; installPrompt = null; });
+
+  window.addEventListener('appinstalled', () => {
+    localStorage.setItem('hj_pwa_installed', '1');
+    banner.hidden = true;
+    installPrompt = null;
+  });
 })();
 </script>
 </body></html>
