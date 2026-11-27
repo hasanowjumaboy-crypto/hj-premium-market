@@ -323,6 +323,7 @@ function publicProduct(product) {
     rating,
     reviews: reviews.length,
     sizes: product.sizes || [],
+    characteristics: product.characteristics && typeof product.characteristics === 'object' && !Array.isArray(product.characteristics) ? product.characteristics : {},
     sold: soldCount(product.id)
   };
 }
@@ -366,6 +367,12 @@ function readProduct(body, oldProduct = null) {
   return {
     name,
     desc: text(data.desc, 500),
+    characteristics: (() => {
+      const source = data.characteristics && typeof data.characteristics === 'object' && !Array.isArray(data.characteristics)
+        ? data.characteristics
+        : (oldProduct?.characteristics || {});
+      return Object.fromEntries(Object.entries(source).slice(0, 30).map(([key, value]) => [text(key, 50), text(value, 160)]).filter(([key, value]) => key && value));
+    })(),
     price: Math.round(price * 100) / 100,
     stock,
     categoryId,
