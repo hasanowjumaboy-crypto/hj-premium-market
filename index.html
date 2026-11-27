@@ -38,13 +38,13 @@
 <script>
 (()=>{'use strict';
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
-const state={config:{currency:'сомони'},products:[],homeOrder:[],categories:[],cart:{},selected:new Set(),selectedSizes:{},view:'home',category:'all',search:'',saleIndex:0,saleSlide:0,saleSwipeAt:0,profile:null,profileEditing:false,orders:[],reviews:[],refreshingHome:false,adminToken:sessionStorage.getItem('hj_admin_token')||'',adminTab:'stats',adminData:{},profileChatOpen:false,customerChatOrderContext:null,adminChatUid:'',aiMessages:[]};
+const state={config:{currency:'TJS'},products:[],homeOrder:[],categories:[],cart:{},selected:new Set(),selectedSizes:{},view:'home',category:'all',search:'',saleIndex:0,saleSlide:0,saleSwipeAt:0,profile:null,profileEditing:false,orders:[],reviews:[],refreshingHome:false,adminToken:sessionStorage.getItem('hj_admin_token')||'',adminTab:'stats',adminData:{},profileChatOpen:false,customerChatOrderContext:null,adminChatUid:'',aiMessages:[]};
 function deviceId(){let v=localStorage.getItem('hj_device_id');if(!/^[a-f0-9]{32}$/.test(v||'')){const a=new Uint8Array(16);crypto.getRandomValues(a);v=Array.from(a,x=>x.toString(16).padStart(2,'0')).join('');localStorage.setItem('hj_device_id',v)}return v}
 const telegram=()=>window.Telegram?.WebApp?.initData||'';
 function headers(customer=false,admin=false){const h={};if(customer){h['x-device-id']=deviceId();if(telegram())h['x-tg-init-data']=telegram()}if(admin&&state.adminToken)h.Authorization='Bearer '+state.adminToken;return h}
 async function api(url,opts={},kind='public'){const h={...headers(kind==='customer',kind==='admin'),...(opts.headers||{})};if(opts.body&&typeof opts.body==='string')h['Content-Type']='application/json';const res=await fetch(url,{...opts,headers:h});let data={};try{data=await res.json()}catch{}if(!res.ok)throw new Error(data.error||data.message||('Ошибка '+res.status));return data}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function money(v){return new Intl.NumberFormat('ru-RU').format(Number(v)||0)+' '+(state.config.currency||'сомони')}
+function money(v){const raw=String(state.config.currency||'TJS').trim();const currency=/^(сомони|сомон|tjs|с\.?)$/i.test(raw)?'TJS':raw;return new Intl.NumberFormat('ru-RU').format(Number(v)||0)+' '+currency}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.add('hidden'),2800)}
 function img(src,alt=''){return src?`<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">`:'<span>✦</span>'}
 function cartQty(id){return Number(state.cart[id]||0)}
