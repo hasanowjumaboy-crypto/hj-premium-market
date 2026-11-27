@@ -1647,6 +1647,16 @@ admin.delete('/reviews/:id', (req, res) => {
 app.use('/api/admin', admin);
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
 
+// PWA: manifest, service worker и иконка для установки магазина на устройство.
+const PWA_DIR = path.join(__dirname, 'pwa');
+app.use('/pwa', express.static(PWA_DIR, { maxAge: '1h', index: false }));
+app.get('/sw.js', (req, res) => {
+  res.set('Content-Type', 'application/javascript; charset=utf-8');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(PWA_DIR, 'sw.js'));
+});
+
+
 const INDEX_FILE = path.join(__dirname, 'index.html');
 
 app.get('/open-whatsapp', (req, res) => {
