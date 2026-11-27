@@ -59,6 +59,8 @@ if (!Array.isArray(db.messages)) db.messages = [];
 if (!db.carts || typeof db.carts !== 'object' || Array.isArray(db.carts)) db.carts = {};
 if (!Array.isArray(db.botPending)) db.botPending = [];
 
+if (!db.referralPending || typeof db.referralPending !== 'object' || Array.isArray(db.referralPending)) db.referralPending = {};
+
 
 if (!db.demoCatalogSeeded) {
   const cat = name => db.categories.find(c => c.name === name)?.id;
@@ -97,6 +99,65 @@ function save() {
 
 function nextId() {
   return db.seq++;
+}
+
+function makeReferralCode() {
+  return crypto.randomBytes(6).toString('hex').toUpperCase();
+}
+function ensureReferralCode(profile) {
+  if (!profile.referralCode || !/^[A-Z0-9]{8,20}$/.test(String(profile.referralCode))) profile.referralCode = makeReferralCode();
+  return profile.referralCode;
+}
+function profileByReferralCode(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{8,20}$/.test(normalized)) return null;
+  return Object.entries(db.profiles).find(([, profile]) => String(profile?.referralCode || '').toUpperCase() === normalized) || null;
+}
+function attachReferral(uid, code) {
+  const profile = db.profiles[uid];
+  if (!profile || profile.referredBy || !code) return false;
+  const inviter = profileByReferralCode(code);
+  if (!inviter || inviter[0] === uid) return false;
+  profile.referredBy = inviter[0];
+  profile.referredAt = new Date().toISOString();
+  return true;
+}
+function publicCustomerProfile(uid, telegram = null, referralCode = '') {
+  let profile = db.profiles[uid];
+  let changed = false;
+  if (!profile) {
+    profile = {
+      firstName: text(telegram?.first_name, 40),
+      lastName: text(telegram?.last_name, 40),
+      middleName: '',
+      phone: '',
+      gender: '',
+      age: '',
+      address: '',
+      photo: '',
+      createdAt: new Date().toISOString()
+    };
+    db.profiles[uid] = profile;
+    changed = true;
+  }
+  if (telegram) {
+    if (!profile.firstName && telegram.first_name) { profile.firstName = text(telegram.first_name, 40); changed = true; }
+    if (!profile.lastName && telegram.last_name) { profile.lastName = text(telegram.last_name, 40); changed = true; }
+    if (telegram.username && profile.telegramUsername !== telegram.username) { profile.telegramUsername = text(telegram.username, 40); changed = true; }
+    if (profile.telegramId !== String(telegram.id)) { profile.telegramId = String(telegram.id); changed = true; }
+  }
+  if (!profile.createdAt) { profile.createdAt = new Date().toISOString(); changed = true; }
+  const oldCode = profile.referralCode;
+  ensureReferralCode(profile);
+  if (oldCode !== profile.referralCode) changed = true;
+  if (attachReferral(uid, referralCode)) changed = true;
+  if (telegram && db.referralPending[String(telegram.id)]) {
+    if (attachReferral(uid, db.referralPending[String(telegram.id)])) changed = true;
+    delete db.referralPending[String(telegram.id)];
+    changed = true;
+  }
+  if (changed) save();
+  return profile;
 }
 
 function text(value, maxLength = 500) {
@@ -212,6 +273,7 @@ function identifyCustomer(req, res, next) {
   }
 
   req.uid = 'web:' + hash(deviceId).toString('hex').slice(0, 32);
+  req.referralCode = text(req.headers['x-referral-code'], 20).toUpperCase();
   next();
 }
 
@@ -393,10 +455,23 @@ app.post('/telegram/webhook', async (req, res) => {
   res.sendStatus(200);
   const message = req.body?.message;
   const chatId = message?.chat?.id;
-  const command = String(message?.text || '').trim().split(/\s+/, 1)[0].split('@')[0].toLowerCase();
   if (!chatId) return;
+  const telegramId = String(message.from?.id || '');
+  if (message.contact && telegramId && String(message.contact.user_id || '') === telegramId) {
+    const profile = publicCustomerProfile('tg:' + telegramId, message.from || null, '');
+    const phone = text(message.contact.phone_number, 20);
+    if (phone) { profile.phone = phone; save(); }
+    return;
+  }
+  const parts = String(message?.text || '').trim().split(/\s+/);
+  const command = String(parts[0] || '').split('@')[0].toLowerCase();
+  const startPayload = command === '/start' ? String(parts[1] || '') : '';
 
   if (command === '/start' || command === '/start@hj_premium_market_bot') {
+    if (/^ref_[A-Z0-9]{8,20}$/i.test(startPayload)) {
+      db.referralPending[telegramId] = startPayload.slice(4).toUpperCase();
+      save();
+    }
     try {
       await sendTelegramStart(chatId, message.from?.first_name || '');
     } catch (error) {
@@ -508,16 +583,7 @@ app.put('/api/cart', identifyCustomer, (req, res) => {
 });
 
 app.get('/api/profile', identifyCustomer, (req, res) => {
-  const profile = db.profiles[req.uid] || {
-    firstName: text(req.telegram?.first_name, 40),
-    lastName: text(req.telegram?.last_name, 40),
-    middleName: '',
-    phone: '',
-    gender: '',
-    age: '',
-    address: '',
-    photo: ''
-  };
+  const profile = publicCustomerProfile(req.uid, req.telegram || null, req.referralCode || '');
   res.json({ profile, via: req.telegram ? 'telegram' : 'web' });
 });
 
@@ -548,6 +614,7 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   }
 
   db.profiles[req.uid] = {
+    ...old,
     firstName,
     lastName: text(body.lastName, 40),
     middleName: text(body.middleName, 40),
@@ -555,8 +622,10 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
     gender,
     age,
     address: text(body.address, 300),
-    photo
+    photo,
+    createdAt: old.createdAt || new Date().toISOString()
   };
+  ensureReferralCode(db.profiles[req.uid]);
 
   save();
   res.json(db.profiles[req.uid]);
@@ -1296,6 +1365,34 @@ admin.post('/messages/:uid', (req, res) => {
 
 // Customer directory for the owner panel. Private contact details are returned only
 // behind requireAdmin and are never exposed by the public storefront API.
+admin.get('/referrals', (req, res) => {
+  const customers = Object.entries(db.profiles).map(([uid, profile]) => ({
+    uid, profile,
+    orders: db.orders.filter(order => order.uid === uid).sort((a,b)=>new Date(b.date)-new Date(a.date))
+  }));
+  const inviters = customers.filter(item => item.profile.referralCode).map(item => {
+    const invited = customers.filter(candidate => candidate.profile.referredBy === item.uid);
+    return {
+      uid: item.uid,
+      name: [item.profile.firstName, item.profile.lastName].filter(Boolean).join(' ') || 'Покупатель',
+      phone: item.profile.phone || '',
+      telegramId: item.profile.telegramId || (item.uid.startsWith('tg:') ? item.uid.slice(3) : ''),
+      referralCode: item.profile.referralCode,
+      invitedCount: invited.length,
+      invitedWithOrders: invited.filter(candidate => candidate.orders.some(order => order.status !== 'Отменён')).length,
+      invited: invited.map(candidate => ({
+        uid: candidate.uid,
+        name: [candidate.profile.firstName, candidate.profile.lastName].filter(Boolean).join(' ') || 'Покупатель',
+        phone: candidate.profile.phone || '',
+        telegramId: candidate.profile.telegramId || (candidate.uid.startsWith('tg:') ? candidate.uid.slice(3) : ''),
+        createdAt: candidate.profile.createdAt || '',
+        orderCount: candidate.orders.length,
+        orders: candidate.orders.map(order => ({id:order.id,total:order.total,status:order.status,date:order.date}))
+      }))
+    };
+  }).sort((a,b)=>b.invitedCount-a.invitedCount);
+  res.json({totalCustomers:customers.length,referredCustomers:customers.filter(item=>item.profile.referredBy).length,inviters});
+});
 admin.get('/customers', (req, res) => {
   const ids = new Set([
     ...Object.keys(db.profiles),
@@ -1527,6 +1624,15 @@ app.use('/api/admin', admin);
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
 
 const INDEX_FILE = path.join(__dirname, 'index.html');
+
+app.get('/r/:code', (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!/^[A-Z0-9]{8,20}$/.test(code)) return res.status(404).send('Ссылка приглашения недействительна');
+  const browserUrl = '/?ref=' + encodeURIComponent(code);
+  const telegramUrl = 'https://t.me/HJ_Premium_Market_Bot?start=ref_' + encodeURIComponent(code);
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#171d2b"><title>HJ Premium Market</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:#f5f6fa;font:16px system-ui,-apple-system,Segoe UI,Arial;color:#171d2b}.card{width:min(100%,390px);padding:28px 22px;background:#fff;border:1px solid #e8eaf0;border-radius:22px;box-shadow:0 12px 36px #17203312;text-align:center}.logo{font-size:22px;font-weight:900;letter-spacing:1px}.sub{color:#7b8290;font-size:13px;margin:9px 0 24px}.btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:50px;margin:10px 0;border-radius:13px;text-decoration:none;font-weight:800}.tg{background:#229ed9;color:white}.web{background:#f0f1f5;color:#171d2b}.hint{font-size:11px;color:#89909b;margin-top:16px}</style></head><body><main class="card"><div class="logo">HJ PREMIUM MARKET</div><div class="sub">Выберите, как открыть магазин</div><a class="btn tg" href="${telegramUrl}">✈ Открыть через Telegram</a><a class="btn web" href="${browserUrl}">🌐 Открыть магазин в браузере</a><div class="hint">Ваш переход по приглашению будет сохранён.</div></main></body></html>`);
+});
 
 app.get(['/', '/admin'], (req, res) => {
   // Always revalidate the app shell so mobile/Telegram webviews don't keep an old broken admin page.
