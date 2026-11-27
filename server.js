@@ -601,18 +601,17 @@ app.get('/api/profile', identifyCustomer, (req, res) => {
 app.put('/api/profile', identifyCustomer, (req, res) => {
   const body = req.body || {};
   const old = db.profiles[req.uid] || {};
-  const firstName = text(body.firstName, 40);
-  const phone = text(body.phone, 20);
-  const gender = text(body.gender, 20);
-  const age = Number(body.age);
+  const firstName = body.firstName !== undefined
+    ? text(body.firstName, 40)
+    : (old.firstName || text(req.telegram?.first_name, 40));
+  const phone = body.phone !== undefined ? text(body.phone, 20) : (old.phone || '');
+  const gender = body.gender !== undefined ? text(body.gender, 20) : (old.gender || '');
+  const age = body.age !== undefined && body.age !== '' ? Number(body.age) : (old.age ?? '');
 
-  if (!firstName) return errorResponse(res, 'Укажите имя');
-  if (!phone) return errorResponse(res, 'Укажите номер телефона');
-  if (!['Мужской', 'Женский'].includes(gender)) return errorResponse(res, 'Укажите пол');
-  if (!Number.isInteger(age) || age < 1 || age > 120) return errorResponse(res, 'Укажите корректный возраст');
-  if (!/^\+?[0-9 ()-]{7,20}$/.test(phone)) {
-    return errorResponse(res, 'Неверный номер телефона');
-  }
+  if (body.firstName !== undefined && !firstName) return errorResponse(res, 'Укажите имя');
+  if (phone && !/^\+?[0-9 ()-]{7,20}$/.test(phone)) return errorResponse(res, 'Неверный номер телефона');
+  if (gender && !['Мужской', 'Женский'].includes(gender)) return errorResponse(res, 'Укажите пол');
+  if (age !== '' && (!Number.isInteger(age) || age < 1 || age > 120)) return errorResponse(res, 'Укажите корректный возраст');
 
   let photo = old.photo || '';
   if (body.photo === '') {
@@ -627,17 +626,16 @@ app.put('/api/profile', identifyCustomer, (req, res) => {
   db.profiles[req.uid] = {
     ...old,
     firstName,
-    lastName: text(body.lastName, 40),
-    middleName: text(body.middleName, 40),
+    lastName: body.lastName !== undefined ? text(body.lastName, 40) : (old.lastName || ''),
+    middleName: body.middleName !== undefined ? text(body.middleName, 40) : (old.middleName || ''),
     phone,
     gender,
     age,
-    address: text(body.address, 300),
+    address: body.address !== undefined ? text(body.address, 300) : (old.address || ''),
     photo,
     createdAt: old.createdAt || new Date().toISOString()
   };
   ensureReferralCode(db.profiles[req.uid]);
-
   save();
   res.json(customerVisibleProfile(db.profiles[req.uid]));
 });
@@ -714,8 +712,8 @@ app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
 
 app.post('/api/orders', identifyCustomer, (req, res) => {
   const profile = db.profiles[req.uid] || {};
-  if (!profile.firstName || !profile.phone || !profile.address) {
-    return errorResponse(res, 'Заполните имя, телефон и адрес в профиле');
+  if (!profile.phone || !profile.address) {
+    return errorResponse(res, 'Укажите телефон и адрес доставки');
   }
 
   const list = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -772,7 +770,7 @@ app.post('/api/orders', identifyCustomer, (req, res) => {
   const order = {
     id: ++db.orderNo,
     uid: req.uid,
-    name: [profile.lastName, profile.firstName, profile.middleName].filter(Boolean).join(' '),
+    name: [profile.lastName, profile.firstName || text(req.telegram?.first_name, 40) || 'Покупатель', profile.middleName].filter(Boolean).join(' '),
     phone: profile.phone,
     gender: profile.gender,
     age: profile.age,
