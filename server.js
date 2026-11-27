@@ -670,13 +670,15 @@ app.delete('/api/chat/:messageId',identifyChatCustomer,(req,res)=>{const chat=db
 
 app.get('/api/orders', identifyCustomer, (req, res) => {
   const orders = db.orders
-    .filter(order => order.uid === req.uid)
+    .filter(order => order.uid === req.uid && !order.hiddenForCustomer)
     .map(order => ({
       id: order.id,
       items: (order.items || []).map(item => ({ ...item, reviewed: db.reviews.some(review => review.uid === req.uid && review.productId === item.productId) })),
       total: order.total,
       status: order.status === 'Продано' ? (order.customerStatus || 'Доставлен') : order.status,
       cancelReason: order.cancelReason || '',
+      cancelledBy: order.cancelledBy || '',
+      cancelledAt: order.cancelledAt || '',
       date: order.date,
       phone: order.phone,
       address: order.address,
@@ -697,17 +699,28 @@ app.post('/api/orders/:id/cancel', identifyCustomer, (req, res) => {
     return errorResponse(res, 'Время отмены заказа (1 час) истекло');
   }
   if (order.status !== 'Новый') return errorResponse(res, 'Заказ уже принят в обработку. Свяжитесь с магазином для отмены');
+  const cancelReason = text(req.body?.cancelReason, 300);
+  if (!cancelReason) return errorResponse(res, 'Укажите причину отмены заказа');
   for (const item of order.items) {
     const product = db.products.find(product => product.id === item.productId);
     if (product) product.stock += item.qty;
   }
   order.status = 'Отменён';
-  order.cancelReason = text(req.body?.cancelReason, 300);
+  order.cancelReason = cancelReason;
   order.cancelledAt = new Date().toISOString();
   order.cancelledBy = 'Покупатель';
   order.stockRestoredOnCancel = true;
   save();
   res.json({ ok: true, order });
+});
+
+app.delete('/api/orders/:id', identifyCustomer, (req, res) => {
+  const order = db.orders.find(item => item.id === Number(req.params.id) && item.uid === req.uid);
+  if (!order) return errorResponse(res, 'Заказ не найден', 404);
+  if (order.status !== 'Отменён') return errorResponse(res, 'Удалять можно только отменённые заказы', 400);
+  order.hiddenForCustomer = true;
+  save();
+  res.json({ ok: true, id: order.id });
 });
 
 app.post('/api/orders', identifyCustomer, (req, res) => {
@@ -1440,6 +1453,8 @@ admin.put('/orders/:id', (req, res) => {
   if (!ADMIN_STATUSES.includes(status)) return errorResponse(res, 'Неверный статус');
   const wasCancelled = order.status === 'Отменён';
   const willBeCancelled = status === 'Отменён';
+  const cancelReason = willBeCancelled ? text(req.body?.cancelReason, 300) : '';
+  if (willBeCancelled && !cancelReason) return errorResponse(res, 'Укажите причину отмены заказа');
   if (willBeCancelled && !wasCancelled) {
     const canReturnToStock = !['Отправлен', 'В пути', 'Доставлен'].includes(order.status);
     if (canReturnToStock) {
@@ -1470,9 +1485,9 @@ admin.put('/orders/:id', (req, res) => {
   }
   order.status = status;
   if (willBeCancelled) {
-    order.cancelReason = text(req.body?.cancelReason, 300);
-    order.cancelledAt = order.cancelledAt || new Date().toISOString();
-    order.cancelledBy = req.body?.cancelledBy === 'Покупатель' ? 'Покупатель' : 'Администратор';
+    order.cancelReason = cancelReason;
+    order.cancelledAt = new Date().toISOString();
+    order.cancelledBy = 'Администратор';
   } else {
     order.cancelReason = '';
     order.cancelledAt = '';
