@@ -329,7 +329,7 @@ async function checkout(){
   const phone=String($('#checkoutPhone')?.value||state.profile?.phone||'').trim();
   const address=String($('#checkoutAddress')?.value||state.profile?.address||'').trim();
   if(!phone){toast('Укажите номер телефона');$('#checkoutPhone')?.focus();return}
-  if(!/^\\+?[0-9 ()-]{7,20}$/.test(phone)){toast('Проверьте номер телефона');$('#checkoutPhone')?.focus();return}
+  if(!/^\+?[0-9 ()-]{7,20}$/.test(phone)){toast('Проверьте номер телефона');$('#checkoutPhone')?.focus();return}
   if(!address){toast('Укажите адрес доставки');$('#checkoutAddress')?.focus();return}
   const saved=await api('/api/profile',{method:'PUT',body:JSON.stringify({phone,address})},'customer');state.profile=saved.profile||saved||{...state.profile,phone,address};
   const result=await api('/api/orders',{method:'POST',body:JSON.stringify({items})},'customer');
