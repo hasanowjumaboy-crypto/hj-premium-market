@@ -112,7 +112,7 @@ function priceMarkup(p, quantity=1, large=false){const discounted=Number(p.disco
 function parseCharacteristics(value){const result={};String(value||'').split(String.fromCharCode(10)).forEach(line=>{const i=line.indexOf(':');if(i<1)return;const key=line.slice(0,i).trim(),val=line.slice(i+1).trim();if(key&&val)result[key]=val});return result}
 function productCard(p){
  const photos=[...new Set((Array.isArray(p.photos)&&p.photos.length?p.photos:[p.image]).filter(Boolean))],first=photos[0]||'',q=cartQty(p.id);
- return `<article class="product"><div class="card-gallery" data-card-gallery="${esc(p.id)}" data-open-product="${esc(p.id)}">
+ return `<article class="product" data-open-product="${esc(p.id)}"><div class="card-gallery" data-card-gallery="${esc(p.id)}" data-open-product="${esc(p.id)}">
  ${first?`<img class="card-gallery-image" src="${esc(first)}" alt="${esc(p.name)}" loading="lazy">`:'<div class="card-gallery-empty">✦</div>'}
  ${Number(p.discountPercent)>0?`<span class="product-sale-badge">−${Number(p.discountPercent)}%</span>`:''}
  ${photos.length>1?`<div class="card-photo-dots">${photos.map((_,i)=>`<button type="button" class="card-photo-dot ${i===0?'active':''}" data-card-dot="${i}" aria-label="Фото ${i+1}"></button>`).join('')}</div>`:''}
