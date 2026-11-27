@@ -808,7 +808,7 @@ start();
   const installedFlag = () => localStorage.getItem('hj_pwa_installed') === '1';
   const updateLabel = () => {
     const b = document.getElementById('installShopApp');
-    if (b) b.querySelector('span:last-child').textContent = (isStandalone() || installedFlag()) ? 'Открыть приложение' : 'Установить приложение';
+    if (b) { const label = (isStandalone() || installedFlag()) ? 'Открыть приложение' : 'Установить приложение'; const target = b.querySelector('span:last-child'); if (target && target.textContent !== label) target.textContent = label; }
   };
   updateLabel();
   document.addEventListener('click', async event => {
@@ -827,7 +827,7 @@ start();
     }
     if (window.Telegram?.WebApp) {
       const url = location.origin + location.pathname + location.search;
-      window.Telegram.WebApp.openLink(url);
+      if (typeof window.Telegram.WebApp.openLink === 'function') window.Telegram.WebApp.openLink(url); else window.open(url, '_blank', 'noopener');
       if (typeof window.toast === 'function') window.toast('Откройте магазин в браузере, чтобы установить приложение');
       return;
     }
