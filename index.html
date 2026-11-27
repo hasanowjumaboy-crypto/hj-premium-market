@@ -32,9 +32,9 @@
 \n/* Admin side drawer navigation */\n.admin-menu-toggle{position:fixed;z-index:72;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));width:44px;height:44px;border:1px solid #ffffff24;border-radius:12px;background:#171d2b;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;box-shadow:0 4px 16px #0003}.admin-menu-toggle span{display:block;width:21px;height:2px;border-radius:2px;background:#fff}.admin-menu-shade{position:fixed;z-index:70;inset:0;background:#10182780;opacity:0;visibility:hidden;transition:opacity .22s,visibility .22s}.adminnav{position:fixed;z-index:71;left:0;top:0;bottom:0;width:min(30vw,300px);min-width:230px;max-width:300px;padding:76px 12px 24px;background:#fff;box-shadow:8px 0 30px #0002;display:flex;flex-direction:column;align-items:stretch;gap:7px;overflow-y:auto;transform:translateX(-105%);transition:transform .24s ease;margin:0;border-radius:0 18px 18px 0}.adminnav.open{transform:translateX(0)}.admin-menu-shade.open{opacity:1;visibility:visible}.admin-drawer-title{font-size:11px;font-weight:900;letter-spacing:1.5px;color:#9299a5;padding:0 10px 12px}.adminnav button{width:100%;text-align:left;white-space:normal;border:0;border-radius:10px;background:#f4f5f8;padding:12px 13px;color:#293345;font-size:13px;font-weight:650}.adminnav button.active{background:#171d2b;color:#fff}.adminheader{padding-left:58px}.adminwrap{padding-top:12px}@media(max-width:480px){.adminnav{width:78vw;min-width:0;max-width:300px}.adminheader{padding-left:58px}}\n
 /* HJ Premium Market product gallery redesign */
 .product{position:relative;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none;padding-bottom:12px}
-.card-gallery{position:relative;width:100%;height:clamp(145px,42vw,205px);overflow:hidden;border-radius:13px;background:#f2f3f6;touch-action:pan-y;cursor:pointer}
-.card-gallery-image{display:block;width:100%;height:100%;object-fit:cover}
-.card-gallery-empty,.detail-no-photo{width:100%;height:100%;display:grid;place-items:center;color:#a0a5af;font-size:34px;background:#f2f3f6}
+.card-gallery{position:relative;width:100%;height:clamp(145px,42vw,205px);overflow:visible;border-radius:13px;background:transparent;touch-action:pan-y;cursor:pointer}
+.card-gallery-image{display:block;width:100%;height:100%;object-fit:cover;border-radius:13px;background:#f2f3f6}
+.card-gallery-empty,.detail-no-photo{width:100%;height:100%;display:grid;place-items:center;color:#a0a5af;font-size:34px;background:#f2f3f6;border-radius:13px}
 .card-photo-dots,.detail-photo-dots{position:absolute;left:0;right:0;bottom:9px;display:flex;justify-content:center;align-items:center;gap:5px}
 .card-photo-dot,.detail-photo-dot{width:6px;height:6px;padding:0;border:0;border-radius:50%;background:#ffffffa8;box-shadow:0 1px 3px #0005}
 .card-photo-dot.active,.detail-photo-dot.active{width:7px;height:7px;background:#fff;box-shadow:0 0 0 1px #5557}
@@ -42,7 +42,7 @@
 .product .price{margin:0 0 4px;font-size:17px;line-height:1.2;color:#7b2cbf}
 .product .pname{display:block;width:100%;padding:0;border:0;background:transparent;text-align:left;color:#202633;font-size:13px;line-height:1.3;font-weight:700;min-height:34px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rating-count{display:block;margin:4px 0 0;padding:0;border:0;background:transparent;color:#89909c;font-size:10px;text-align:left}
-.product-cart-float{position:absolute;z-index:3;right:0;top:calc(clamp(145px,42vw,205px) - 18px);display:flex;justify-content:flex-end}
+.product-cart-float{position:absolute;z-index:5;right:8px;bottom:-18px;display:flex;justify-content:flex-end;pointer-events:auto}
 .product-cart-float .addbtn{width:42px;height:42px;border-radius:12px;background:#1677e8;color:#fff;box-shadow:0 4px 12px #1677e83d}
 .product-cart-float .addbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .product-cart-float .qty{background:#1677e8;color:#fff;border-radius:12px;padding:4px 6px;gap:7px;box-shadow:0 4px 12px #1677e83d}
@@ -80,7 +80,7 @@
 .detail-buybar button{width:min(736px,100%);height:46px;border:0;border-radius:12px;background:#1677e8;color:#fff;font-size:15px;font-weight:850;box-shadow:0 4px 14px #1677e833}
 .detail-buybar button:disabled{opacity:.5}
 body:has(.product-detail-page){padding-bottom:158px}
-@media(min-width:600px){.card-gallery{height:210px}.product-cart-float{top:192px}.detail-gallery{height:50svh}}
+@media(min-width:600px){.card-gallery{height:210px}.detail-gallery{height:50svh}}
 
 .photo-viewer-inner{width:100%;height:100%;display:flex;flex-direction:column;color:#fff;padding:12px}.photo-viewer-head{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px}.photo-viewer-head b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.photo-viewer-head button{width:40px;height:40px;border:0;background:transparent;color:#fff;font-size:30px}.photo-viewer-stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.photo-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain}.photo-viewer-dots{display:flex;justify-content:center;gap:7px;padding:12px}.photo-viewer-dots span{width:6px;height:6px;border-radius:50%;background:#ffffff70}.photo-viewer-dots span.active{background:#fff;width:8px;height:8px}
 </style>
@@ -116,8 +116,9 @@ function productCard(p){
  ${first?`<img class="card-gallery-image" src="${esc(first)}" alt="${esc(p.name)}" loading="lazy">`:'<div class="card-gallery-empty">✦</div>'}
  ${Number(p.discountPercent)>0?`<span class="product-sale-badge">−${Number(p.discountPercent)}%</span>`:''}
  ${photos.length>1?`<div class="card-photo-dots">${photos.map((_,i)=>`<button type="button" class="card-photo-dot ${i===0?'active':''}" data-card-dot="${i}" aria-label="Фото ${i+1}"></button>`).join('')}</div>`:''}
+  <div class="product-cart-float">${q?`<div class="qty card-qty"><button type="button" data-minus="${esc(p.id)}">−</button><span>${q}</span><button type="button" data-plus="${esc(p.id)}">+</button></div>`:`<button type="button" class="addbtn product-cart-icon" data-add="${esc(p.id)}" aria-label="Добавить в корзину" title="Добавить в корзину" ${Number(p.stock)<=0?'disabled':''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18l-2 10H5L3 10Z"/><path d="m8 10 4-6 4 6M8 14v3M12 14v3M16 14v3"/></svg></button>`}</div>
  </div><div class="pbody"><div class="price">${priceMarkup(p)}</div><button type="button" class="pname" data-open-product="${esc(p.id)}">${esc(p.name)}</button><button type="button" class="rating-count" data-reviews="${esc(p.id)}">${Number(p.reviews||0)} оценок</button></div>
- <div class="product-cart-float">${q?`<div class="qty card-qty"><button type="button" data-minus="${esc(p.id)}">−</button><span>${q}</span><button type="button" data-plus="${esc(p.id)}">+</button></div>`:`<button type="button" class="addbtn product-cart-icon" data-add="${esc(p.id)}" aria-label="Добавить в корзину" title="Добавить в корзину" ${Number(p.stock)<=0?'disabled':''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18l-2 10H5L3 10Z"/><path d="m8 10 4-6 4 6M8 14v3M12 14v3M16 14v3"/></svg></button>`}</div></article>`;
+</article>`;
 }
 function nav(){return `<div class="bottom"><nav class="nav"><button data-view="home" class="${state.view==='home'?'active':''}"><b>⌂</b>Главная</button><button data-view="catalog" class="${state.view==='catalog'?'active':''}"><b>▦</b>Каталог</button><button data-view="cart" class="${state.view==='cart'?'active':''}"><b>🛒</b>Корзина ${cartCount()?`<span class="count">${cartCount()}</span>`:''}</button><button data-view="profile" class="${state.view==='profile'?'active':''}"><b>♙</b>Профиль</button></nav></div>`}
 function header(){return `<header class="top"><div class="brandline"><div><div class="brand">HJ PREMIUM MARKET</div><div class="premium">КАЧЕСТВО · СТИЛЬ · ПРЕМИУМ</div></div><div style="font-size:27px;color:#e8c78b">✦</div></div><p>Добро пожаловать! Выбирайте товары и оформляйте заказ онлайн.</p><div class="searchbox"><input id="search" placeholder="Найти товар…" value="${esc(state.search)}"><button id="searchBtn">Найти</button></div></header>`}
