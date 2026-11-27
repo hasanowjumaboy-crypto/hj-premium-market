@@ -22,7 +22,8 @@ const SECRET =
   process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update('hj-market:' + ADMIN_PASSWORD).digest('hex');
 
-const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Собран', 'Отправлен', 'В пути', 'Доставлен', 'Продано', 'Отменён'];
+const STATUSES = ['Новый', 'Подтверждён', 'Собирается', 'Собран', 'Отправлен', 'В пути', 'Доставлен', 'Отменён'];
+const ADMIN_STATUSES = [...STATUSES.filter(status => status !== 'Отменён'), 'Продано', 'Отменён'];
 
 fs.mkdirSync(UPLOADS, { recursive: true });
 
@@ -595,7 +596,7 @@ app.get('/api/orders', identifyCustomer, (req, res) => {
       id: order.id,
       items: (order.items || []).map(item => ({ ...item, reviewed: db.reviews.some(review => review.uid === req.uid && review.productId === item.productId) })),
       total: order.total,
-      status: order.status,
+      status: order.status === 'Продано' ? (order.customerStatus || 'Доставлен') : order.status,
       cancelReason: order.cancelReason || '',
       date: order.date,
       phone: order.phone,
@@ -900,7 +901,7 @@ function botPreview(action) {
     const o = botOrder(action.orderId);
     if (!o) throw Object.assign(new Error('Заказ не найден'), {status:404});
     const status = action.type === 'cancel_order' ? 'Отменён' : text(action.status,30);
-    if (!STATUSES.includes(status)) throw Object.assign(new Error('Недопустимый статус заказа'), {status:400});
+    if (!ADMIN_STATUSES.includes(status)) throw Object.assign(new Error('Недопустимый статус заказа'), {status:400});
     if (o.status === status) throw Object.assign(new Error('Заказ уже имеет этот статус'), {status:400});
     return {action:{type:'update_order_status',orderId:o.id,status}, preview:{title:status==='Отменён'?'Отмена заказа':'Изменение статуса заказа',target:'Заказ №'+o.id,oldValue:o.status,newValue:status,total:o.total}};
   }
@@ -980,7 +981,7 @@ function applyBotAction(action) {
       required.forEach(([product,qty])=>{product.stock-=qty;});
       order.stockRestoredOnCancel=false;
     }
-    if (order.status !== status) { const changedAt = new Date().toISOString(); order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}]; order.statusHistory.push({status, at: changedAt}); if (status === 'Продано') order.soldAt = changedAt; else if (order.soldAt) order.soldAt = ''; }
+    if (order.status !== status) { const changedAt = new Date().toISOString(); order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}]; order.statusHistory.push({status, at: changedAt}); if (status === 'Продано') { order.customerStatus = order.status === 'Продано' ? (order.customerStatus || 'Доставлен') : (order.status || 'Доставлен'); order.soldAt = changedAt; } else { order.customerStatus = ''; order.soldAt = ''; } }
     order.status=status;
     if(willBeCancelled){order.cancelReason='Отменён владельцем';order.cancelledAt=order.cancelledAt||new Date().toISOString();order.cancelledBy='Администратор';}
     else {order.cancelReason='';order.cancelledAt='';order.cancelledBy='';}
@@ -1036,7 +1037,7 @@ function applyBotAction(action) {
   throw Object.assign(new Error('Неизвестное действие'),{status:400});
 }
 app.get('/api/bot/catalog', requireBotApi, (req,res) => {
-  res.json({categories:db.categories.map(x=>({id:x.id,name:x.name})),products:db.products.map(p=>({id:p.id,name:p.name,price:p.price,regularPrice:p.discountPercent?Number(p.regularPrice):null,discountPercent:Number(p.discountPercent)||0,discountReason:p.discountPercent?(p.discountReason||''):'',stock:p.stock,categoryId:p.categoryId,category:db.categories.find(x=>x.id===p.categoryId)?.name||''})),orders:db.orders.slice(-100).reverse().map(o=>({id:o.id,status:o.status,total:o.total,date:o.date,items:(o.items||[]).map(i=>({name:i.name,qty:i.qty}))})),statuses:STATUSES});
+  res.json({categories:db.categories.map(x=>({id:x.id,name:x.name})),products:db.products.map(p=>({id:p.id,name:p.name,price:p.price,regularPrice:p.discountPercent?Number(p.regularPrice):null,discountPercent:Number(p.discountPercent)||0,discountReason:p.discountPercent?(p.discountReason||''):'',stock:p.stock,categoryId:p.categoryId,category:db.categories.find(x=>x.id===p.categoryId)?.name||''})),orders:db.orders.slice(-100).reverse().map(o=>({id:o.id,status:o.status,total:o.total,date:o.date,items:(o.items||[]).map(i=>({name:i.name,qty:i.qty}))})),statuses:ADMIN_STATUSES});
 });
 app.post('/api/bot/prepare', requireBotApi, (req,res) => {
   try {
@@ -1329,7 +1330,7 @@ admin.put('/orders/:id', (req, res) => {
   const order = db.orders.find(item => item.id === Number(req.params.id));
   if (!order) return errorResponse(res, 'Заказ не найден', 404);
   const status = req.body?.status;
-  if (!STATUSES.includes(status)) return errorResponse(res, 'Неверный статус');
+  if (!ADMIN_STATUSES.includes(status)) return errorResponse(res, 'Неверный статус');
   const wasCancelled = order.status === 'Отменён';
   const willBeCancelled = status === 'Отменён';
   if (willBeCancelled && !wasCancelled) {
@@ -1353,7 +1354,13 @@ admin.put('/orders/:id', (req, res) => {
     required.forEach(([product, qty]) => { product.stock -= qty; });
     order.stockRestoredOnCancel = false;
   }
-  if (order.status !== status) { const changedAt = new Date().toISOString(); order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}]; order.statusHistory.push({status, at: changedAt}); if (status === 'Продано') order.soldAt = changedAt; else if (order.soldAt) order.soldAt = ''; }
+  if (order.status !== status) {
+    const changedAt = new Date().toISOString();
+    order.statusHistory = Array.isArray(order.statusHistory) ? order.statusHistory : [{status: order.status || 'Новый', at: order.date || changedAt}];
+    order.statusHistory.push({status, at: changedAt});
+    if (status === 'Продано') { order.customerStatus = order.status === 'Продано' ? (order.customerStatus || 'Доставлен') : (order.status || 'Доставлен'); order.soldAt = changedAt; }
+    else { order.customerStatus = ''; order.soldAt = ''; }
+  }
   order.status = status;
   if (willBeCancelled) {
     order.cancelReason = text(req.body?.cancelReason, 300);
