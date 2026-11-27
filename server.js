@@ -1528,7 +1528,11 @@ app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, in
 const INDEX_FILE = path.join(__dirname, 'index.html');
 
 app.get(['/', '/admin'], (req, res) => {
-  res.sendFile(INDEX_FILE, error => {
+  // Always revalidate the app shell so mobile/Telegram webviews don't keep an old broken admin page.
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(INDEX_FILE, { cacheControl: false }, error => {
     if (error && !res.headersSent) {
       console.error('Не удалось открыть index.html:', error);
       res.status(500).send('Не удалось открыть index.html');
