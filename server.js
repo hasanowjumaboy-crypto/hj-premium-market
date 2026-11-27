@@ -11,7 +11,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const BOT_API_SECRET = process.env.BOT_API_SECRET || '';
 const BOT_OWNER_ID = String(process.env.BOT_OWNER_ID || '').trim();
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const CURRENCY = process.env.CURRENCY || 'сомони';
+const CURRENCY_RAW = process.env.CURRENCY || 'TJS';
+const CURRENCY = /^(сомони|сомон|tjs|с\.?)$/i.test(String(CURRENCY_RAW).trim()) ? 'TJS' : CURRENCY_RAW;
 const DATA_DIR =
   process.env.DATA_DIR ||
   process.env.RAILWAY_VOLUME_MOUNT_PATH ||
