@@ -724,131 +724,133 @@ start();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(error => console.warn('PWA service worker:', error)));
   }
-  const banner = document.getElementById('pwa-install-banner');
-  const action = document.getElementById('pwa-install-action');
-  const hint = document.getElementById('pwa-install-hint');
-  const close = document.getElementById('pwa-install-close');
-  if (!banner || !action || !hint || !close) return;
+  const banner=document.getElementById('pwa-install-banner');
+  const action=document.getElementById('pwa-install-action');
+  const hint=document.getElementById('pwa-install-hint');
+  const close=document.getElementById('pwa-install-close');
+  if(!banner||!action||!hint||!close)return;
 
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const telegramApp = window.Telegram && window.Telegram.WebApp;
-  const inTelegram = Boolean(telegramApp);
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  if (standalone || localStorage.getItem('hj_pwa_installed') === '1' || sessionStorage.getItem('hj_pwa_banner_closed') === '1') return;
+  const telegramApp=window.Telegram&&window.Telegram.WebApp;
+  const inTelegram=Boolean(telegramApp&&telegramApp.initData);
+  const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const isAndroid=/Android/i.test(navigator.userAgent);
+  const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  const installed=()=>isStandalone()||localStorage.getItem('hj_pwa_installed')==='1';
+  const params=new URLSearchParams(location.search);
+  const cameFromTelegramInstall=params.get('pwa_install')==='1';
+  let installPrompt=null;
+  let autoAttempted=false;
 
-  let installPrompt = null;
-  const show = (message, label) => {
-    hint.textContent = message;
-    action.textContent = label;
-    banner.hidden = false;
-  };
+  if(isStandalone())localStorage.setItem('hj_pwa_installed','1');
 
-  if (inTelegram) {
-    show(
-      isIOS
-        ? 'Чтобы установить магазин на iPhone, откройте его в Safari, затем «Поделиться» → «На экран Домой».'
-        : 'Откройте магазин в браузере, затем в меню выберите «Установить приложение» или «Добавить на главный экран».',
-      'Открыть в браузере'
-    );
-    action.addEventListener('click', () => {
-      const url = location.href;
-      if (typeof telegramApp.openLink === 'function') telegramApp.openLink(url);
-      else window.open(url, '_blank', 'noopener');
-    });
-  } else if (isIOS) {
-    show('На iPhone откройте магазин в Safari: «Поделиться» → «На экран Домой» → «Добавить».', 'Как установить');
-    action.addEventListener('click', () => alert('Откройте эту страницу именно в Safari. Нажмите «Поделиться», выберите «На экран Домой», затем нажмите «Добавить».'));
-  } else {
-    show(
-      isAndroid
-        ? 'Добавьте магазин на главный экран через меню браузера. Если появится предложение — нажмите «Установить».'
-        : 'Добавьте HJ PREMIUM MARKET на главный экран или установите приложение из меню браузера.',
-      'Как установить'
-    );
-    action.addEventListener('click', async () => {
-      if (installPrompt) {
-        const promptEvent = installPrompt;
-        installPrompt = null;
-        await promptEvent.prompt();
-        await promptEvent.userChoice.catch(() => null);
-        banner.hidden = true;
-        return;
+  function hideInstallControls(){
+    banner.hidden=true;
+    const profileButton=document.getElementById('installShopApp');
+    if(profileButton)profileButton.hidden=true;
+  }
+  function show(message,label){
+    if(installed()){hideInstallControls();return;}
+    hint.textContent=message;
+    action.textContent=label||'Установить';
+    banner.hidden=false;
+  }
+  function cleanInstallParameter(){
+    if(!params.has('pwa_install'))return;
+    params.delete('pwa_install');
+    const next=location.pathname+(params.toString()?'?'+params.toString():'')+location.hash;
+    history.replaceState(history.state,'',next);
+  }
+  function openInBrowser(){
+    const url=new URL(location.href);
+    url.searchParams.set('pwa_install','1');
+    if(telegramApp&&typeof telegramApp.openLink==='function')telegramApp.openLink(url.toString());
+    else window.open(url.toString(),'_blank','noopener');
+  }
+  async function requestInstall(fromUser){
+    if(installed()){hideInstallControls();return;}
+    if(isIOS){
+      alert('На iPhone откройте магазин в Safari. Нажмите «Поделиться» → «На экран Домой» → «Добавить».');
+      return;
+    }
+    if(!installPrompt){
+      show(isAndroid?'Если окно установки не появилось, откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».','Установить');
+      if(fromUser)alert(isAndroid?'Если системное окно не появилось, откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».');
+      return;
+    }
+    const promptEvent=installPrompt;
+    try{
+      const promptResult=promptEvent.prompt();
+      installPrompt=null;
+      window.hjInstallPrompt=null;
+      await promptResult;
+      const choice=await promptEvent.userChoice;
+      if(choice&&choice.outcome==='accepted'){
+        hint.textContent='Установка приложения началась…';
+        action.textContent='Установка…';
+        banner.hidden=true;
+      }else{
+        show('Установка не завершена. Нажмите «Установить» ещё раз, если браузер предлагает установку, или откройте меню браузера.','Установить');
       }
-      alert(isAndroid
-        ? 'Откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран». В Яндекс Браузере этот пункт также находится в меню браузера.'
-        : 'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».');
-    });
+    }catch(error){
+      installPrompt=promptEvent;
+      window.hjInstallPrompt=promptEvent;
+      show('Браузер не открыл установку автоматически. Нажмите «Установить» ещё раз.','Установить');
+    }
   }
 
-  window.addEventListener('beforeinstallprompt', event => {
+  if(installed())hideInstallControls();
+  else if(inTelegram){
+    show(isIOS?'Откройте магазин в Safari, чтобы добавить его на экран «Домой».':'Нажмите, чтобы открыть магазин в браузере и установить его на телефон.','Открыть в браузере');
+    action.addEventListener('click',openInBrowser);
+  }else if(isIOS){
+    show('На iPhone: откройте магазин в Safari → «Поделиться» → «На экран Домой» → «Добавить».','Как установить');
+    action.addEventListener('click',()=>requestInstall(true));
+  }else{
+    show('Установите HJ PREMIUM MARKET на главный экран телефона.','Установить');
+    action.addEventListener('click',()=>requestInstall(true));
+  }
+
+  window.addEventListener('beforeinstallprompt',event=>{
     event.preventDefault();
-    installPrompt = event;
-    window.hjInstallPrompt = event;
-    if (!inTelegram && !isIOS) {
-      hint.textContent = 'Установите магазин с иконкой — он будет открываться как приложение.';
-      action.textContent = 'Установить';
-      banner.hidden = false;
+    installPrompt=event;
+    window.hjInstallPrompt=event;
+    if(installed()){hideInstallControls();return;}
+    if(!inTelegram){
+      show('Нажмите «Установить», чтобы добавить магазин на главный экран телефона.','Установить');
+      if(cameFromTelegramInstall&&!autoAttempted){
+        autoAttempted=true;
+        setTimeout(()=>requestInstall(false),250);
+      }
     }
   });
 
-  close.addEventListener('click', () => {
-    banner.hidden = true;
-    sessionStorage.setItem('hj_pwa_banner_closed', '1');
+  close.addEventListener('click',()=>{
+    banner.hidden=true;
+    sessionStorage.setItem('hj_pwa_banner_closed','1');
   });
 
-  window.addEventListener('appinstalled', () => {
-    localStorage.setItem('hj_pwa_installed', '1');
-    banner.hidden = true;
-    installPrompt = null;
+  window.addEventListener('appinstalled',()=>{
+    localStorage.setItem('hj_pwa_installed','1');
+    installPrompt=null;
+    window.hjInstallPrompt=null;
+    hideInstallControls();
   });
-})();
-</script>
-<script>
-(() => {
-  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const installedFlag = () => localStorage.getItem('hj_pwa_installed') === '1';
-  const updateLabel = () => {
-    const b = document.getElementById('installShopApp');
-    if (b) { const label = (isStandalone() || installedFlag()) ? 'Открыть приложение' : 'Установить приложение'; const target = b.querySelector('span:last-child'); if (target && target.textContent !== label) target.textContent = label; }
-  };
-  updateLabel();
-  document.addEventListener('click', async event => {
-    const b = event.target.closest('#installShopApp');
-    if (!b) return;
-    if (isStandalone()) {
-      b.querySelector('span:last-child').textContent = 'Вы уже в приложении';
-      if (typeof window.toast === 'function') window.toast('HJ PREMIUM MARKET уже открыт как приложение');
-      else alert('HJ PREMIUM MARKET уже открыт как приложение.');
-      return;
-    }
-    if (installedFlag()) {
-      if (typeof window.toast === 'function') window.toast('Приложение уже установлено. Запустите HJ PREMIUM MARKET с иконки на главном экране.');
-      else alert('Приложение уже установлено. Запустите HJ PREMIUM MARKET с иконки на главном экране.');
-      return;
-    }
-    if (window.Telegram?.WebApp) {
-      const url = location.origin + location.pathname + location.search;
-      if (typeof window.Telegram.WebApp.openLink === 'function') window.Telegram.WebApp.openLink(url); else window.open(url, '_blank', 'noopener');
-      if (typeof window.toast === 'function') window.toast('Откройте магазин в браузере, чтобы установить приложение');
-      return;
-    }
-    const promptEvent = window.hjInstallPrompt;
-    if (promptEvent) {
-      window.hjInstallPrompt = null;
-      await promptEvent.prompt();
-      const choice = await promptEvent.userChoice.catch(() => null);
-      if (choice?.outcome === 'accepted') b.querySelector('span:last-child').textContent = 'Установка…';
-      return;
-    }
-    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    alert(ios
-      ? 'Откройте магазин именно в Safari. Нажмите «Поделиться» → «На экран Домой» → «Добавить». После установки запускайте магазин с новой иконки.'
-      : 'Откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран». После установки запускайте магазин с иконки HJ PREMIUM MARKET.');
+
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('#installShopApp');
+    if(!button)return;
+    event.preventDefault();
+    if(installed()){hideInstallControls();return;}
+    if(inTelegram){openInBrowser();return;}
+    requestInstall(true);
   });
-  window.addEventListener('appinstalled', updateLabel);
-  const observer = new MutationObserver(updateLabel);
-  observer.observe(document.body, {childList:true,subtree:true});
+
+  const observer=new MutationObserver(()=>{
+    if(installed())hideInstallControls();
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  document.addEventListener('visibilitychange',()=>{if(installed())hideInstallControls();});
+  cleanInstallParameter();
 })();
 </script>
 </body></html>
