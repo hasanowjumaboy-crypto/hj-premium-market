@@ -188,7 +188,7 @@ function bindCommon(){
   const plus=e.target.closest('[data-plus]');if(plus){changeQty(plus.dataset.plus,1);return}
   const minus=e.target.closest('[data-minus]');if(minus){changeQty(minus.dataset.minus,-1);return}
   const remove=e.target.closest('[data-remove]');if(remove){delete state.cart[remove.dataset.remove];state.selected.delete(remove.dataset.remove);saveCart();render();return}
-  const open=e.target.closest('[data-open-product]');if(open){const gallery=open.closest('[data-card-gallery]');if(gallery&&Date.now()-Number(gallery.dataset.swipedAt||0)<450)return;openProduct(open.dataset.openProduct);return}
+  const open=e.target.closest('[data-open-product]');if(open&&!e.target.closest('[data-reviews]')){const gallery=open.closest('[data-card-gallery]');if(gallery&&Date.now()-Number(gallery.dataset.swipedAt||0)<450)return;openProduct(open.dataset.openProduct);return}
   const orderChat=e.target.closest('[data-chat-order]');if(orderChat){e.preventDefault();e.stopPropagation();openCustomerOrderChat(state.orders.find(o=>String(o.id)===String(orderChat.dataset.chatOrder)));return}
   const orderProduct=e.target.closest('[data-order-product]');if(orderProduct){openOrderedProduct(orderProduct.dataset.orderProduct);return}
   const reviews=e.target.closest('[data-reviews]');if(reviews){openReviews(reviews.dataset.reviews);return}
