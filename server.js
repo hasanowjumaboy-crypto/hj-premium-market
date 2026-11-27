@@ -1242,7 +1242,7 @@ admin.get('/categories', (req, res) => {
 admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
 
 admin.get('/sales-report', (req, res) => {
-  const validDate = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(value || ''));
+  const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
   const from = validDate(req.query.from) ? String(req.query.from) : '';
   const to = validDate(req.query.to) ? String(req.query.to) : '';
   const soldOrders = db.orders.filter(order => order.status === 'Продано').map(order => ({
