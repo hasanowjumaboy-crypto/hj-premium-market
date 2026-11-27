@@ -1629,6 +1629,15 @@ app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, in
 
 const INDEX_FILE = path.join(__dirname, 'index.html');
 
+app.get('/open-whatsapp', (req, res) => {
+  const message = String(req.query.text || '').slice(0, 1800);
+  const encoded = encodeURIComponent(message);
+  const intentUrl = 'intent://send?text=' + encoded + '#Intent;scheme=whatsapp;package=com.whatsapp;end';
+  const htmlEscape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Открыть WhatsApp</title><style>body{font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;padding:22px;background:#f5f6fa;color:#171d2b}.card{max-width:380px;text-align:center;background:white;border-radius:18px;padding:26px;box-shadow:0 8px 30px #0001}.btn{display:block;margin-top:18px;padding:15px;border-radius:12px;background:#16a34a;color:white;text-decoration:none;font-weight:800}</style></head><body><main class="card"><b>HJ Premium Market</b><p>Нажмите кнопку, чтобы открыть обычный WhatsApp.</p><a class="btn" href="${htmlEscape(intentUrl)}">Открыть обычный WhatsApp</a><p style="font-size:12px;color:#777">Если приложение не открылось, убедитесь, что обычный WhatsApp установлен.</p></main><script>setTimeout(()=>{location.href=${JSON.stringify(intentUrl)}},350)</script></body></html>`);
+});
+
 app.get('/r/:code', (req, res) => {
   const code = String(req.params.code || '').toUpperCase();
   if (!/^[A-Z0-9]{8,20}$/.test(code)) return res.status(404).send('Ссылка приглашения недействительна');
