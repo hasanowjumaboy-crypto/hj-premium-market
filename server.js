@@ -1331,7 +1331,7 @@ admin.get('/categories', (req, res) => {
   res.json(db.categories);
 });
 
-admin.get('/orders', (req, res) => res.json([...db.orders].reverse()));
+admin.get('/orders', (req, res) => res.json([...db.orders].filter(order => !order.hiddenForAdmin).reverse()));
 
 admin.get('/sales-report', (req, res) => {
   const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
@@ -1501,7 +1501,7 @@ admin.delete('/orders/:id', (req, res) => {
   const order = db.orders.find(item => item.id === Number(req.params.id));
   if (!order) return errorResponse(res, 'Заказ не найден', 404);
   if (order.status !== 'Отменён') return errorResponse(res, 'Удалять можно только отменённые заказы', 400);
-  db.orders = db.orders.filter(item => item.id !== order.id);
+  order.hiddenForAdmin = true;
   save();
   res.json({ ok: true, id: order.id });
 });
