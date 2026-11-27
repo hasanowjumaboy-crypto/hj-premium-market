@@ -610,7 +610,7 @@ async function loadAdminTab(){const el=$('#adminContent');if(!el)return;sessionS
    <label class="fieldlabel">Название товара *</label><input class="field" name="name" required placeholder="Например, мужские часы">
    <label class="fieldlabel">Категория *</label><select class="field" name="categoryId" required>${cats.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
    <label class="fieldlabel">Описание товара</label><textarea class="field" name="desc" placeholder="Подробное описание товара" rows="4"></textarea>
-   <label class="fieldlabel">Характеристики товара</label><textarea class="field" name="characteristics" placeholder="Артикул: 125478\nБренд: Название\nОбъём: 100 мл\nРазмер: 42\nШирина: 10 см\nДлина: 25 см\nМодель: Название\nКоличество предметов в упаковке: 1" rows="6"></textarea><p class="muted">Каждая характеристика с новой строки: Название: значение. Заполняйте только нужные поля.</p>
+   <label class="fieldlabel">Характеристики товара</label>${characteristicFieldsMarkup()}
    <div class="formgrid"><label><span class="fieldlabel">Цена *</span><input class="field" name="price" type="number" min="0" step="0.01" required placeholder="Цена"></label><label><span class="fieldlabel">Количество *</span><input class="field" name="stock" type="number" min="0" step="1" required placeholder="Количество"></label></div>
    <button type="submit" class="primary dark" style="width:100%;margin-top:8px">Добавить товар</button>
   </form></div>`;
@@ -633,7 +633,7 @@ async function loadAdminTab(){const el=$('#adminContent');if(!el)return;sessionS
   <label class="fieldlabel">Название товара *</label><input class="field" name="name" required placeholder="Например, мужские часы">
   <label class="fieldlabel">Категория *</label><select class="field" name="categoryId" required>${cats.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
   <label class="fieldlabel">Описание товара</label><textarea class="field" name="desc" placeholder="Подробное описание товара" rows="3"></textarea>
-  <label class="fieldlabel">Характеристики товара</label><textarea class="field" name="characteristics" placeholder="Артикул: 125478\nБренд: Название\nОбъём: 100 мл\nРазмер: 42\nШирина: 10 см\nДлина: 25 см\nМодель: Название\nКоличество предметов в упаковке: 1" rows="6"></textarea><p class="muted">Каждая характеристика с новой строки: Название: значение.</p>
+  <label class="fieldlabel">Характеристики товара</label>${characteristicFieldsMarkup()}
   <div class="formgrid"><label><span class="fieldlabel">Цена за *</span><input class="field" name="price" type="number" min="0" step="0.01" required placeholder="Цена"></label><label><span class="fieldlabel">Количество в наличии *</span><input class="field" name="stock" type="number" min="0" step="1" required placeholder="Количество"></label></div>
   <button class="primary dark" style="width:100%">Добавить товар</button>
  </form></div>
@@ -645,6 +645,7 @@ async function loadAdminTab(){const el=$('#adminContent');if(!el)return;sessionS
  <div style="display:none"><button class="secondary" data-edit-product="${esc(p.id)}">Изменить</button><button class="secondary danger" data-delete-product="${esc(p.id)}">Удалить</button><button type="button" class="secondary" data-discount-product="${esc(p.id)}">Скидка</button></div><div id="edit-${esc(p.id)}"></div></div>`}).join('')}
  </div>`;
  const newProductPanel=$('#newProductPanel',el),newProductToggle=$('#toggleNewProduct',el);
+ bindCharacteristicFields($('#newProduct',el));
  const closeNewProduct=()=>{if(newProductPanel)newProductPanel.hidden=true;if(newProductToggle){newProductToggle.textContent='＋';newProductToggle.setAttribute('aria-label','Добавить товар')}};
  if(newProductToggle)newProductToggle.onclick=()=>{sessionStorage.setItem('hj_admin_create_product','1');loadAdminTab()};
  $('#closeNewProduct',el).onclick=closeNewProduct;
