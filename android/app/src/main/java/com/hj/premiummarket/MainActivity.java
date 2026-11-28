@@ -1,17 +1,22 @@
 package com.hj.premiummarket;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.Signature;
+import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Build;
+import java.security.MessageDigest;
 import android.provider.Settings;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -28,6 +33,9 @@ public class MainActivity extends Activity {
     private static final String PREFS = "hj_market_updater";
     private static final String KEY_DOWNLOAD_ID = "download_id";
     private static final String KEY_PENDING_START = "pending_start";
+    private static final String KEY_MIGRATION_DOWNLOAD = "migration_download";
+    private static final String RELEASE_CERT_SHA256 = "5A6A35B78A34032605EA083529A9F0C5BEE207257357DD29EAAD79B1EAAA52F3";
+    private boolean pendingMigrationDownload = false;
     private WebView webView;
     private DownloadManager downloadManager;
     private BroadcastReceiver downloadReceiver;
@@ -42,6 +50,16 @@ public class MainActivity extends Activity {
             } catch (Exception error) {
                 return 0;
             }
+        }
+
+        @JavascriptInterface
+        public String getSignerSha256() {
+            return signerSha256();
+        }
+
+        @JavascriptInterface
+        public void downloadMigrationApk(String url) {
+            runOnUiThread(() -> beginMigrationDownload(url));
         }
 
         @JavascriptInterface
@@ -102,10 +120,44 @@ public class MainActivity extends Activity {
         else webView.loadUrl(SHOP_URL);
     }
 
-    private void beginUpdate(String requestedUrl) {
+    private boolean isAllowedApkUrl(String requestedUrl) {
         Uri uri = Uri.parse(requestedUrl == null || requestedUrl.isEmpty() ? APK_URL : requestedUrl);
-        if (!"https".equals(uri.getScheme()) || !"hj-premium-market-production.up.railway.app".equals(uri.getHost())
-                || !"/downloads/HJ-PREMIUM-MARKET.apk".equals(uri.getPath())) {
+        return "https".equals(uri.getScheme()) && "hj-premium-market-production.up.railway.app".equals(uri.getHost())
+                && "/downloads/HJ-PREMIUM-MARKET.apk".equals(uri.getPath());
+    }
+
+    private String signerSha256() {
+        try {
+            PackageInfo info;
+            if (Build.VERSION.SDK_INT >= 28) info = getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+            else info = getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNATURES);
+            Signature[] signatures;
+            if (Build.VERSION.SDK_INT >= 28) {
+                signatures = info.signingInfo.hasMultipleSigners() ? info.signingInfo.getApkContentsSigners() : info.signingInfo.getSigningCertificateHistory();
+            } else signatures = info.signatures;
+            if (signatures == null || signatures.length == 0) return "";
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray());
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest) hex.append(String.format(java.util.Locale.US, "%02X", b));
+            return hex.toString();
+        } catch (Exception error) { return ""; }
+    }
+
+    private void beginMigrationDownload(String requestedUrl) {
+        if (!isAllowedApkUrl(requestedUrl)) {
+            Toast.makeText(this, "Не удалось проверить адрес новой версии.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            pendingMigrationDownload = true;
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 731);
+            return;
+        }
+        startApkDownload(true);
+    }
+
+    private void beginUpdate(String requestedUrl) {
+        if (!isAllowedApkUrl(requestedUrl)) {
             Toast.makeText(this, "Не удалось проверить адрес обновления.", Toast.LENGTH_LONG).show();
             return;
         }
@@ -121,10 +173,10 @@ public class MainActivity extends Activity {
             }
             return;
         }
-        startApkDownload();
+        startApkDownload(false);
     }
 
-    private void startApkDownload() {
+    private void startApkDownload(boolean migration) {
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
         long oldId = prefs.getLong(KEY_DOWNLOAD_ID, -1L);
         if (oldId != -1L && isDownloadRunning(oldId)) {
@@ -139,9 +191,10 @@ public class MainActivity extends Activity {
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setAllowedOverMetered(true);
             request.setAllowedOverRoaming(false);
-            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "HJ-PREMIUM-MARKET-update.apk");
+            if (migration) request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "HJ-PREMIUM-MARKET-new.apk");
+            else request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "HJ-PREMIUM-MARKET-update.apk");
             long id = downloadManager.enqueue(request);
-            prefs.edit().putLong(KEY_DOWNLOAD_ID, id).putBoolean(KEY_PENDING_START, false).apply();
+            prefs.edit().putLong(KEY_DOWNLOAD_ID, id).putBoolean(KEY_PENDING_START, false).putBoolean(KEY_MIGRATION_DOWNLOAD, migration).apply();
             Toast.makeText(this, "Загрузка обновления началась. Уведомление появится после скачивания.", Toast.LENGTH_LONG).show();
         } catch (Exception error) {
             Toast.makeText(this, "Не удалось начать загрузку. Проверьте интернет и повторите.", Toast.LENGTH_LONG).show();
@@ -186,9 +239,16 @@ public class MainActivity extends Activity {
                 if (!cursor.moveToFirst()) return;
                 status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
             } finally { cursor.close(); }
+            SharedPreferences prefs = getPreferences(MODE_PRIVATE);
+            boolean migration = prefs.getBoolean(KEY_MIGRATION_DOWNLOAD, false);
             if (status != DownloadManager.STATUS_SUCCESSFUL) {
-                getPreferences(MODE_PRIVATE).edit().remove(KEY_DOWNLOAD_ID).apply();
+                prefs.edit().remove(KEY_DOWNLOAD_ID).putBoolean(KEY_MIGRATION_DOWNLOAD, false).apply();
                 Toast.makeText(this, "Не удалось скачать обновление. Попробуйте ещё раз.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (migration) {
+                prefs.edit().remove(KEY_DOWNLOAD_ID).putBoolean(KEY_MIGRATION_DOWNLOAD, false).apply();
+                Toast.makeText(this, "Новая версия скачана в папку «Загрузки». Удалите старое приложение, затем откройте файл HJ-PREMIUM-MARKET-new.apk для установки.", Toast.LENGTH_LONG).show();
                 return;
             }
             if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
@@ -210,6 +270,16 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 731 && pendingMigrationDownload) {
+            pendingMigrationDownload = false;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) startApkDownload(true);
+            else Toast.makeText(this, "Без разрешения Android не сможет сохранить APK в папку «Загрузки».", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
@@ -218,7 +288,7 @@ public class MainActivity extends Activity {
             prefs.edit().putBoolean(KEY_PENDING_START, false).apply();
             long id = prefs.getLong(KEY_DOWNLOAD_ID, -1L);
             if (id > 0) installDownloadedApk(id);
-            else startApkDownload();
+            else startApkDownload(false);
         } else {
             long id = prefs.getLong(KEY_DOWNLOAD_ID, -1L);
             if (id > 0) {
