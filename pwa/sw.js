@@ -1,5 +1,5 @@
-const CACHE_NAME = 'hj-premium-market-shell-v1';
-const SHELL = ['/', '/pwa/manifest.webmanifest', '/pwa/icon.svg'];
+const CACHE_NAME = 'hj-premium-market-shell-v2';
+const SHELL = ['/', '/pwa/manifest.webmanifest', '/pwa/icon.svg', '/pwa/icon-192.png', '/pwa/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)));
