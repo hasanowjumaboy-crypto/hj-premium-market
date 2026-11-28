@@ -736,15 +736,14 @@ start();
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const isAndroid=/Android/i.test(navigator.userAgent);
   const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
-  const installed=()=>isStandalone()||localStorage.getItem('hj_pwa_installed')==='1';
+  const installed=()=>isStandalone();
   const params=new URLSearchParams(location.search);
   const cameFromTelegramInstall=params.get('pwa_install')==='1';
   const launchChrome=params.get('launch_chrome')==='1';
-  const isChrome=/Chrome\\/[0-9]+/i.test(navigator.userAgent)&&!/EdgA|OPR|YaBrowser|SamsungBrowser|UCBrowser/i.test(navigator.userAgent);
+  const isChrome=/Chrome\/[0-9]+/i.test(navigator.userAgent)&&!/EdgA|OPR|YaBrowser|SamsungBrowser|UCBrowser/i.test(navigator.userAgent);
   let installPrompt=null;
   let autoAttempted=false;
 
-  if(isStandalone())localStorage.setItem('hj_pwa_installed','1');
 
   function hideInstallControls(){
     banner.hidden=true;
@@ -862,7 +861,6 @@ start();
   });
 
   window.addEventListener('appinstalled',()=>{
-    localStorage.setItem('hj_pwa_installed','1');
     installPrompt=null;
     window.hjInstallPrompt=null;
     hideInstallControls();
