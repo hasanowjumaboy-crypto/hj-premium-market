@@ -774,15 +774,16 @@ start();
     const url=new URL(location.href);
     url.searchParams.set('pwa_install','1');
     url.searchParams.set('from_telegram','1');
-    if(isAndroid)url.searchParams.set('launch_chrome','1');
     const target=url.toString();
+    // Android: launch Chrome directly through an Android intent.
+    // Do this before Telegram openLink, which may open only the default browser.
+    if(isAndroid){openChrome(target);return;}
     try{
       if(telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
         telegramApp.openLink(target,{try_instant_view:false});
         return;
       }
     }catch(error){console.warn('Telegram openLink failed:',error);}
-    if(isAndroid){openChrome(target);return;}
     let opened=null;
     try{opened=window.open(target,'_blank');}catch(error){console.warn('External browser open failed:',error);}
     if(opened){try{opened.opener=null;}catch(error){}}
