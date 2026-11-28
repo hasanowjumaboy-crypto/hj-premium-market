@@ -1766,7 +1766,7 @@ app.use('/api/admin', admin);
 // Public build version lets installed web apps offer an explicit update prompt.
 app.get('/api/version', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.json({ version: APP_BUILD_VERSION, app: 'HJ PREMIUM MARKET' });
+  res.json({ version: APP_BUILD_VERSION, app: 'HJ PREMIUM MARKET', androidVersionCode: 4, androidVersionName: '3.1.0', apkUrl: 'https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk' });
 });
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
 app.get('/downloads/HJ-PREMIUM-MARKET.apk', (req, res) => {
