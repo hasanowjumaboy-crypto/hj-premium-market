@@ -783,6 +783,15 @@ start();
         if (!response.ok) return;
         const data = await response.json();
         if (!data.version) return;
+        const nativeAndroid = window.HJAndroid && typeof window.HJAndroid.getVersionCode === 'function';
+        if (nativeAndroid) {
+          const installedCode = Number(window.HJAndroid.getVersionCode()) || 0;
+          if (Number(data.androidVersionCode) > installedCode) {
+            currentBuildVersion = data.version;
+            showUpdateNotice();
+          }
+          return;
+        }
         const installedVersion = localStorage.getItem(VERSION_KEY);
         if (!installedVersion) {
           localStorage.setItem(VERSION_KEY, data.version);
@@ -812,6 +821,11 @@ start();
           if (!response.ok) throw new Error('Не удалось проверить новую версию');
           const data = await response.json();
           if (data.version) currentBuildVersion = data.version;
+          if (window.HJAndroid && typeof window.HJAndroid.updateApp === 'function') {
+            button.textContent = 'Открываем установку…';
+            window.HJAndroid.updateApp(data.apkUrl || 'https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk');
+            return;
+          }
           if (registrationRef) {
             try {
               await registrationRef.update();
