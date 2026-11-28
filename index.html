@@ -875,15 +875,27 @@ start();
             const copy = document.getElementById('hj-migration-copy');
             if (copy) copy.textContent = 'После скачивания откройте папку «Загрузки», удалите старую версию приложения и установите файл HJ-PREMIUM-MARKET-new.apk. В будущем приложение будет обновляться через кнопку.';
           } else {
-            try {
-              await navigator.clipboard.writeText(url);
+            let copied = false;
+            try { await navigator.clipboard.writeText(url); copied = true; } catch (error) {}
+            if (!copied) {
+              try {
+                const field = document.createElement('textarea');
+                field.value = url;
+                field.style.position = 'fixed';
+                field.style.opacity = '0';
+                document.body.appendChild(field);
+                field.select();
+                copied = document.execCommand('copy');
+                field.remove();
+              } catch (error) {}
+            }
+            const copy = document.getElementById('hj-migration-copy');
+            if (copied) {
               button.textContent = 'Ссылка скопирована';
-              const copy = document.getElementById('hj-migration-copy');
               if (copy) copy.textContent = 'Ссылка на APK скопирована. Откройте Chrome, вставьте ссылку в адресную строку и скачайте новую версию. Затем удалите старое приложение и установите скачанный файл.';
-            } catch (error) {
+            } else {
               button.disabled = false;
               button.textContent = 'Скопировать ссылку';
-              const copy = document.getElementById('hj-migration-copy');
               if (copy) copy.textContent = 'Откройте магазин в Chrome и скачайте APK по адресу: ' + url;
             }
           }
