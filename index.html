@@ -731,42 +731,53 @@ start();
   const action=document.getElementById('pwa-install-action');
   const hint=document.getElementById('pwa-install-hint');
   const close=document.getElementById('pwa-install-close');
-  if(!banner||!action||!hint||!close)return;
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
-  const inTelegram=Boolean((telegramApp&&telegramApp.initData)||/Telegram/i.test(navigator.userAgent)||new URLSearchParams(location.search).has('tgWebAppPlatform'));
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  const isInstalledApp=/HJPremiumMarketApp\\/1\\.0/i.test(navigator.userAgent)||
-    (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||
-    window.navigator.standalone===true;
+
+  function startApkDownload(){
+    if(isIOS){
+      if(hint)hint.textContent='На iPhone APK не устанавливается. Откройте магазин в Safari и выберите «Поделиться» → «На экран Домой».';
+      return;
+    }
+    if(hint)hint.textContent='Открываем загрузку HJ PREMIUM MARKET. После скачивания откройте APK и подтвердите установку Android.';
+    const url=APK_URL+'?v=2.0.0&download=1';
+    // Telegram Mini App should hand the file URL to the external browser.
+    if(telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
+      try{telegramApp.openLink(url,{try_instant_view:false});return;}
+      catch(error){console.warn('Telegram openLink failed:',error);}
+    }
+    // A real anchor click is more reliable for Android download managers than location.assign.
+    const link=document.createElement('a');
+    link.href=url;
+    link.setAttribute('download','HJ-PREMIUM-MARKET.apk');
+    link.rel='noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Fallback for embedded browsers that ignore the download attribute.
+    setTimeout(()=>{ if(document.visibilityState==='visible') window.location.href=url; },700);
+  }
+
   function syncInstallVisibility(){
-    banner.hidden=isInstalledApp||document.body.dataset.shopView!=='home';
+    if(banner)banner.hidden=document.body.dataset.shopView!=='home';
     const profileButton=document.getElementById('installShopApp');
     if(profileButton)profileButton.hidden=false;
   }
-  function openInstallLink(){
-    if(isIOS){
-      hint.textContent='На iPhone APK не устанавливается. Откройте магазин в Safari и используйте «Поделиться» → «На экран Домой».';
-      return;
-    }
-    hint.textContent='Загружаем приложение. Когда загрузка закончится, нажмите «Открыть» в уведомлении браузера, затем «Установить». Android попросит подтвердить установку.';
-    if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
-      try{telegramApp.openLink(APK_URL,{try_instant_view:false});return;}
-      catch(error){console.warn('Telegram openLink failed:',error);}
-    }
-    const downloadUrl=APK_URL+'?download=1&v=20261128';
-    window.location.assign(downloadUrl);
+  if(action){
+    action.textContent='Скачать и установить';
+    action.addEventListener('click',event=>{event.preventDefault();startApkDownload();});
   }
-  action.textContent='Скачать и установить';
-  hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите кнопку: APK скачается. Затем откройте загрузку из уведомления и подтвердите установку Android.';
-  syncInstallVisibility();
-  action.addEventListener('click',openInstallLink);
-  close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
+  if(hint)hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите, чтобы скачать приложение для Android.';
+  if(close&&banner)close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
+  // Delegated handler works even when the Profile page is rendered after page load.
   document.addEventListener('click',event=>{
-    const button=event.target.closest('#installShopApp');
+    const button=event.target&&event.target.closest?event.target.closest('#installShopApp'):null;
     if(!button)return;
     event.preventDefault();
-    openInstallLink();
+    event.stopPropagation();
+    startApkDownload();
   });
+  syncInstallVisibility();
   const observer=new MutationObserver(syncInstallVisibility);
   observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-shop-view']});
 
