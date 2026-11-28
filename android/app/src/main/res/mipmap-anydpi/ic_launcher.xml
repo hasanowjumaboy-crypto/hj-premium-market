@@ -1,10 +1,5 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="512" android:viewportHeight="512">
     <path android:fillColor="#1246A0" android:pathData="M0,0h512v512h-512z"/>
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="18" android:fillColor="#1246A0" android:pathData="M256,35 A221,221 0,1 1,255.9 35"/>
-    <path android:fillColor="#08275C" android:pathData="M119,127 L154,127 L154,198 L211,198 L211,127 L246,127 L246,276 L211,276 L211,229 L154,229 L154,276 L119,276 Z M273,127 L308,127 L308,235 C308,268 291,285 259,285 C243,285 229,280 217,270 L237,244 C244,250 251,253 259,253 C269,253 273,247 273,235 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M112,114 L147,114 L147,185 L204,185 L204,114 L239,114 L239,263 L204,263 L204,216 L147,216 L147,263 L112,263 Z M266,114 L301,114 L301,222 C301,255 284,272 252,272 C236,272 222,267 210,257 L230,231 C237,237 244,240 252,240 C262,240 266,234 266,222 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M142,306 L177,306 L191,350 L206,306 L231,306 L246,350 L260,306 L295,306 L265,383 L236,383 L219,338 L202,383 L173,383 Z M310,304 L332,304 L353,353 L374,304 L396,304 L409,383 L385,383 L379,343 L362,383 L345,383 L328,343 L323,383 L299,383 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M153,296 L170,296 L190,357 L345,357 L365,315 L382,315 L356,373 L179,373 Z M190,357 L180,386 L360,386 L360,400 L161,400 L176,357 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M190,384 A13,13 0,1 1,189.9 384 M342,384 A13,13 0,1 1,341.9 384"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M132,286 L160,286 L160,302 L132,302 Z"/>
+    <path android:strokeColor="#111111" android:strokeWidth="24" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" android:pathData="M190,204 L190,157 C190,93 322,93 322,157 L322,204"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M116,184 L396,184 L365,426 L147,426 Z"/>
 </vector>
