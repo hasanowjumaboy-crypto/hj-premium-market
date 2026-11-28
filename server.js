@@ -1764,9 +1764,22 @@ admin.delete('/reviews/:id', (req, res) => {
 app.use('/api/admin', admin);
 
 // Public build version lets installed web apps offer an explicit update prompt.
+function getAndroidReleaseVersion() {
+  try {
+    const gradleFile = path.join(__dirname, 'android', 'app', 'build.gradle');
+    const gradle = fs.readFileSync(gradleFile, 'utf8');
+    const code = Number(gradle.match(/versionCode\s+(\d+)/)?.[1]) || 1;
+    const name = gradle.match(/versionName\s+['\"]([^'\"]+)['\"]/)?.[1] || '1.0.0';
+    return { code, name };
+  } catch (error) {
+    return { code: 1, name: '1.0.0' };
+  }
+}
+
 app.get('/api/version', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.json({ version: APP_BUILD_VERSION, app: 'HJ PREMIUM MARKET', androidVersionCode: 6, androidVersionName: '3.3.0', apkUrl: 'https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk' });
+  const android = getAndroidReleaseVersion();
+  res.json({ version: APP_BUILD_VERSION, app: 'HJ PREMIUM MARKET', androidVersionCode: android.code, androidVersionName: android.name, apkUrl: 'https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk' });
 });
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
 app.get('/downloads/HJ-PREMIUM-MARKET.apk', (req, res) => {
