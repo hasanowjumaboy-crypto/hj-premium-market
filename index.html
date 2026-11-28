@@ -733,14 +733,6 @@ start();
   const close=document.getElementById('pwa-install-close');
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  // Hide only the Home-page reminder after the installed app/PWA is actually opened.
-  // The Profile download button and its click handler remain unchanged.
-  const installSeenKey='hj_premium_market_installed_v1';
-  const isNativeInstalledApp=/HJPremiumMarketApp\\/1\\.0/i.test(navigator.userAgent);
-  const isStandaloneInstalledApp=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
-  if(isNativeInstalledApp||isStandaloneInstalledApp){
-    try{localStorage.setItem(installSeenKey,'1');}catch(error){}
-  }
   function startApkDownload(){
     if(isIOS){
       if(hint)hint.textContent='На iPhone APK не устанавливается. Откройте магазин в Safari и выберите «Поделиться» → «На экран Домой».';
@@ -766,9 +758,7 @@ start();
   }
 
   function syncInstallVisibility(){
-    let installed=false;
-    try{installed=localStorage.getItem(installSeenKey)==='1';}catch(error){}
-    if(banner)banner.hidden=installed||document.body.dataset.shopView!=='home';
+    if(banner)banner.hidden=true;
     const profileButton=document.getElementById('installShopApp');
     if(profileButton)profileButton.hidden=false;
   }
@@ -777,10 +767,6 @@ start();
     action.addEventListener('click',event=>{event.preventDefault();startApkDownload();});
   }
   if(hint)hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите, чтобы скачать приложение для Android.';
-  window.addEventListener('appinstalled',()=>{
-    try{localStorage.setItem(installSeenKey,'1');}catch(error){}
-    syncInstallVisibility();
-  });
   if(close&&banner)close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
   // Delegated handler works even when the Profile page is rendered after page load.
   document.addEventListener('click',event=>{
