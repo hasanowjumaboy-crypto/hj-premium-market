@@ -60,6 +60,7 @@ if (!db.carts || typeof db.carts !== 'object' || Array.isArray(db.carts)) db.car
 if (!Array.isArray(db.botPending)) db.botPending = [];
 
 if (!db.referralPending || typeof db.referralPending !== 'object' || Array.isArray(db.referralPending)) db.referralPending = {};
+if (!Array.isArray(db.telegramLinkChallenges)) db.telegramLinkChallenges = [];
 
 
 if (!db.demoCatalogSeeded) {
@@ -260,10 +261,82 @@ function telegramUser(initData) {
   }
 }
 
+
+function makeCustomerToken(telegramId) {
+  const expires = Date.now() + 365 * 24 * 60 * 60 * 1000;
+  const payload = 'customer.' + String(telegramId) + '.' + expires;
+  return payload + '.' + sign(payload);
+}
+
+function customerTokenUser(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 4 || parts[0] !== 'customer' || !/^\\d{4,20}$/.test(parts[1])) return null;
+  const payload = parts.slice(0, 3).join('.');
+  const expected = Buffer.from(sign(payload));
+  const received = Buffer.from(parts[3]);
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) return null;
+  if (!Number.isFinite(Number(parts[2])) || Number(parts[2]) <= Date.now()) return null;
+  return { id: parts[1] };
+}
+
+function mergeCustomerAccount(sourceUid, targetUid, telegram = null) {
+  if (!sourceUid || !targetUid || sourceUid === targetUid) return;
+  const sourceProfile = db.profiles[sourceUid] || {};
+  const targetProfile = db.profiles[targetUid] || {};
+  const mergedProfile = { ...sourceProfile, ...targetProfile };
+  for (const key of ['firstName','lastName','middleName','phone','gender','age','address','photo','referralCode','referredBy','referredAt','createdAt']) {
+    if ((mergedProfile[key] === undefined || mergedProfile[key] === null || mergedProfile[key] === '') && sourceProfile[key] !== undefined) mergedProfile[key] = sourceProfile[key];
+  }
+  if (telegram) {
+    mergedProfile.telegramId = String(telegram.id);
+    if (telegram.username) mergedProfile.telegramUsername = text(telegram.username, 40);
+    if (!mergedProfile.firstName) mergedProfile.firstName = text(telegram.first_name, 40);
+    if (!mergedProfile.lastName) mergedProfile.lastName = text(telegram.last_name, 40);
+  }
+  if (Object.keys(mergedProfile).length) db.profiles[targetUid] = mergedProfile;
+  delete db.profiles[sourceUid];
+
+  const oldCart = db.carts[sourceUid] || {};
+  const newCart = db.carts[targetUid] || {};
+  const combinedItems = { ...(newCart.items || {}) };
+  for (const [id, qty] of Object.entries(oldCart.items || {})) {
+    const product = db.products.find(item => String(item.id) === String(id));
+    const total = Number(combinedItems[id] || 0) + Number(qty || 0);
+    if (product && Number.isFinite(total) && total > 0) combinedItems[id] = Math.min(Math.floor(total), Number(product.stock));
+  }
+  const combinedSelected = [...new Set([...(newCart.selected || []), ...(oldCart.selected || [])].map(String))]
+    .filter(id => Object.prototype.hasOwnProperty.call(combinedItems, id));
+  db.carts[targetUid] = {
+    items: combinedItems,
+    selected: combinedSelected,
+    sizes: { ...(oldCart.sizes || {}), ...(newCart.sizes || {}) },
+    updatedAt: new Date().toISOString()
+  };
+  delete db.carts[sourceUid];
+
+  for (const order of db.orders) if (order.uid === sourceUid) order.uid = targetUid;
+  for (const review of db.reviews) if (review.uid === sourceUid) review.uid = targetUid;
+
+  const oldChat = db.messages.find(item => item.uid === sourceUid);
+  const newChat = db.messages.find(item => item.uid === targetUid);
+  if (oldChat && newChat) {
+    const known = new Set((newChat.messages || []).map(message => String(message.id)));
+    newChat.messages = [...(newChat.messages || []), ...(oldChat.messages || []).filter(message => !known.has(String(message.id)))];
+    newChat.messages.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    newChat.lastMessage = [newChat.lastMessage, oldChat.lastMessage].filter(Boolean).sort().at(-1) || newChat.lastMessage;
+    if (oldChat.lastMessage && (!newChat.lastMessage || oldChat.lastMessage >= newChat.lastMessage)) newChat.lastText = oldChat.lastText || newChat.lastText;
+    newChat.hiddenForAdmin = Boolean(newChat.hiddenForAdmin && oldChat.hiddenForAdmin);
+    db.messages.splice(db.messages.indexOf(oldChat), 1);
+  } else if (oldChat) {
+    oldChat.uid = targetUid;
+  }
+  for (const profile of Object.values(db.profiles)) if (profile.referredBy === sourceUid) profile.referredBy = targetUid;
+  save();
+}
+
 function identifyCustomer(req, res, next) {
   const initData = String(req.headers['x-tg-init-data'] || '');
   const telegram = telegramUser(initData);
-
   if (initData && !telegram) return errorResponse(res, 'Не удалось подтвердить Telegram-аккаунт. Перезапустите магазин через Telegram.', 401);
   if (telegram) {
     req.uid = 'tg:' + telegram.id;
@@ -271,11 +344,18 @@ function identifyCustomer(req, res, next) {
     return next();
   }
 
-  const deviceId = String(req.headers['x-device-id'] || '');
-  if (!/^[a-f0-9]{32}$/.test(deviceId)) {
-    return errorResponse(res, 'Нет идентификатора устройства', 401);
+  const customerToken = String(req.headers['x-customer-token'] || '');
+  if (customerToken) {
+    const linkedTelegram = customerTokenUser(customerToken);
+    if (!linkedTelegram) return errorResponse(res, 'Срок входа через Telegram истёк. Подключите аккаунт заново.', 401);
+    req.uid = 'tg:' + linkedTelegram.id;
+    const profile = db.profiles[req.uid] || {};
+    req.telegram = { id: linkedTelegram.id, first_name: profile.firstName || '', last_name: profile.lastName || '', username: profile.telegramUsername || '' };
+    return next();
   }
 
+  const deviceId = String(req.headers['x-device-id'] || '');
+  if (!/^[a-f0-9]{32}$/.test(deviceId)) return errorResponse(res, 'Нет идентификатора устройства', 401);
   req.uid = 'web:' + hash(deviceId).toString('hex').slice(0, 32);
   req.referralCode = text(req.headers['x-referral-code'], 20).toUpperCase();
   next();
@@ -483,6 +563,19 @@ app.post('/telegram/webhook', async (req, res) => {
       db.referralPending[telegramId] = startPayload.slice(4).toUpperCase();
       save();
     }
+    const linkMatch = /^link_([a-f0-9]{48})$/i.exec(startPayload);
+    if (linkMatch && telegramId) {
+      const challenge = db.telegramLinkChallenges.find(item => item.id === linkMatch[1] && !item.completedAt && item.expiresAt > Date.now());
+      if (challenge) {
+        const telegramUid = 'tg:' + telegramId;
+        mergeCustomerAccount(challenge.sourceUid, telegramUid, message.from || null);
+        publicCustomerProfile(telegramUid, message.from || null, '');
+        challenge.completedAt = Date.now();
+        challenge.telegramId = telegramId;
+        challenge.customerToken = makeCustomerToken(telegramId);
+        save();
+      }
+    }
     try {
       await sendTelegramStart(chatId, message.from?.first_name || '');
     } catch (error) {
@@ -509,6 +602,29 @@ app.post('/telegram/webhook', async (req, res) => {
 // Проверка состояния сервера
 app.get('/health', (req, res) => {
   res.status(200).json({ ok: true, service: 'HJ PREMIUM MARKET' });
+});
+
+app.post('/api/auth/telegram/link', (req, res) => {
+  if (!BOT_TOKEN) return errorResponse(res, 'Вход через Telegram пока не настроен', 503);
+  const deviceId = String(req.headers['x-device-id'] || '');
+  if (!/^[a-f0-9]{32}$/.test(deviceId)) return errorResponse(res, 'Не удалось определить устройство', 400);
+  const sourceUid = 'web:' + hash(deviceId).toString('hex').slice(0, 32);
+  const id = crypto.randomBytes(24).toString('hex');
+  const now = Date.now();
+  db.telegramLinkChallenges = db.telegramLinkChallenges.filter(item => item.expiresAt > now && !item.completedAt).slice(-100);
+  db.telegramLinkChallenges.push({ id, sourceUid, createdAt: now, expiresAt: now + 15 * 60 * 1000 });
+  save();
+  res.json({ challengeId: id, telegramUrl: 'https://t.me/HJ_Premium_Market_Bot?start=link_' + id, expiresInSeconds: 900 });
+});
+
+app.get('/api/auth/telegram/link/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[a-f0-9]{48}$/.test(id)) return errorResponse(res, 'Ссылка входа недействительна', 400);
+  const challenge = db.telegramLinkChallenges.find(item => item.id === id);
+  if (!challenge) return res.json({ status: 'expired' });
+  if (challenge.expiresAt <= Date.now() && !challenge.completedAt) return res.json({ status: 'expired' });
+  if (!challenge.completedAt) return res.json({ status: 'pending' });
+  res.json({ status: 'completed', token: challenge.customerToken });
 });
 
 app.get('/api/config', (req, res) => {
