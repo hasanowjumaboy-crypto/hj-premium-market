@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# Serialize releases so two builds cannot overwrite the published APK out of order.
+concurrency:
+  group: hj-premium-market-android-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
