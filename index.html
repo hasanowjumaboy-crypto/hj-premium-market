@@ -783,8 +783,18 @@ start();
         if (!response.ok) return;
         const data = await response.json();
         if (!data.version) return;
-        const nativeAndroid = window.HJAndroid && typeof window.HJAndroid.getVersionCode === 'function';
-        if (nativeAndroid) {
+        const nativeApp = /HJPremiumMarketApp/i.test(navigator.userAgent);
+        if (nativeApp) {
+          if (!window.HJAndroid || typeof window.HJAndroid.getSignerSha256 !== 'function') {
+            showMigrationNotice(false, data.apkUrl);
+            return;
+          }
+          const signer = String(window.HJAndroid.getSignerSha256() || '').replace(/:/g, '').toUpperCase();
+          const releaseSigner = '5A6A35B78A34032605EA083529A9F0C5BEE207257357DD29EAAD79B1EAAA52F3';
+          if (signer !== releaseSigner) {
+            showMigrationNotice(true, data.apkUrl);
+            return;
+          }
           const installedCode = Number(window.HJAndroid.getVersionCode()) || 0;
           if (Number(data.androidVersionCode) > installedCode) {
             currentBuildVersion = data.version;
@@ -841,6 +851,45 @@ start();
           button.textContent = 'Повторить обновление';
           const message = notice.querySelector('div:nth-child(2)');
           if (message) message.textContent = 'Не удалось загрузить обновление. Проверьте интернет и нажмите «Повторить обновление».';
+        }
+      });
+    };
+    const showMigrationNotice = (nativeDownload, apkUrl) => {
+      if (document.getElementById('hj-app-update-notice')) return;
+      const notice = document.createElement('section');
+      notice.id = 'hj-app-update-notice';
+      notice.style.cssText = 'position:fixed;z-index:1000;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-width:520px;margin:auto;padding:16px;background:#171d2b;color:#fff;border:1px solid #c69a4b;border-radius:16px;box-shadow:0 12px 36px #0005;font:14px system-ui,-apple-system,Segoe UI,Arial';
+      notice.innerHTML = '<div style="font-size:16px;font-weight:900;margin-bottom:5px">Однократная переустановка HJ Premium Market</div><div id="hj-migration-copy" style="color:#d6dbe4;font-size:12px;line-height:1.45;margin-bottom:12px">Старая версия подписана другим ключом Android. Чтобы включить автоматические обновления, один раз установите новую версию. После удаления старой версии аккаунт и заказы останутся в магазине.</div><button type="button" id="hj-app-update-button" style="width:100%;border:0;border-radius:10px;padding:12px;background:#c69a4b;color:#171717;font-weight:900;font-size:14px">Скачать новую версию</button>';
+      document.body.appendChild(notice);
+      const button = document.getElementById('hj-app-update-button');
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Готовим загрузку…';
+        try {
+          const response = await fetch('/api/version?check=' + Date.now(), { cache: 'no-store' });
+          const data = response.ok ? await response.json() : {};
+          const url = data.apkUrl || apkUrl || 'https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk';
+          if (nativeDownload && window.HJAndroid && typeof window.HJAndroid.downloadMigrationApk === 'function') {
+            window.HJAndroid.downloadMigrationApk(url);
+            button.textContent = 'Скачивание началось';
+            const copy = document.getElementById('hj-migration-copy');
+            if (copy) copy.textContent = 'После скачивания откройте папку «Загрузки», удалите старую версию приложения и установите файл HJ-PREMIUM-MARKET-new.apk. В будущем приложение будет обновляться через кнопку.';
+          } else {
+            try {
+              await navigator.clipboard.writeText(url);
+              button.textContent = 'Ссылка скопирована';
+              const copy = document.getElementById('hj-migration-copy');
+              if (copy) copy.textContent = 'Ссылка на APK скопирована. Откройте Chrome, вставьте ссылку в адресную строку и скачайте новую версию. Затем удалите старое приложение и установите скачанный файл.';
+            } catch (error) {
+              button.disabled = false;
+              button.textContent = 'Скопировать ссылку';
+              const copy = document.getElementById('hj-migration-copy');
+              if (copy) copy.textContent = 'Откройте магазин в Chrome и скачайте APK по адресу: ' + url;
+            }
+          }
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Повторить';
         }
       });
     };
