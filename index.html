@@ -767,18 +767,26 @@ start();
     url.searchParams.set('pwa_install','1');
     url.searchParams.set('from_telegram','1');
     const target=url.toString();
-    // Use an HTTPS link through Telegram's supported external-browser API.
-    // Custom intent:// schemes are blocked by some Telegram Android WebViews.
-    try{
-      if(telegramApp&&typeof telegramApp.openLink==='function'){
+    // Only use Telegram's WebApp external-link API when this is a real,
+    // initialized Mini App session. A merely-present WebApp stub can no-op.
+    if(telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
+      try{
         telegramApp.openLink(target,{try_instant_view:false});
+        hint.textContent='Открываем магазин во внешнем браузере. Если Telegram не переключился, откройте меню ⋮ и выберите «Открыть в браузере».';
         return;
-      }
-    }catch(error){console.warn('Telegram openLink failed:',error);}
-    let opened=null;
-    try{opened=window.open(target,'_blank');}catch(error){console.warn('External browser open failed:',error);}
-    if(opened){try{opened.opener=null;}catch(error){}}
-    hint.textContent='Если браузер не открылся, нажмите ⋮ в Telegram и выберите «Открыть в браузере». Затем выберите Chrome.';
+      }catch(error){console.warn('Telegram openLink failed:',error);}
+    }
+    // Fall back to a real HTTPS anchor opened directly from the user's tap.
+    // Avoid intent:// and custom schemes: Telegram WebViews may reject them.
+    const link=document.createElement('a');
+    link.href=target;
+    link.target='_blank';
+    link.rel='noopener noreferrer';
+    link.style.display='none';
+    document.body.appendChild(link);
+    try{link.click();}catch(error){console.warn('External browser link failed:',error);}
+    link.remove();
+    hint.textContent='Если магазин остался в Telegram, нажмите ⋮ вверху справа → «Открыть в браузере», затем выберите Google Chrome. После открытия Chrome подтвердите «Установить приложение».';
     action.textContent='Открыть в браузере';
   }
   async function requestInstall(fromUser){
