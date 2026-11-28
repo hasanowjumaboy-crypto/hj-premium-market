@@ -753,14 +753,8 @@ start();
       try{telegramApp.openLink(APK_URL,{try_instant_view:false});return;}
       catch(error){console.warn('Telegram openLink failed:',error);}
     }
-    const link=document.createElement('a');
-    link.href=APK_URL;
-    link.target='_blank';
-    link.rel='noopener';
-    link.download='HJ-PREMIUM-MARKET.apk';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    const downloadUrl=APK_URL+'?download=1&v=20261128';
+    window.location.assign(downloadUrl);
   }
   action.textContent='Скачать и установить';
   hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите кнопку: APK скачается. Затем откройте загрузку из уведомления и подтвердите установку Android.';
