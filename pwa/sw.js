@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'hj-premium-market-';
-const CACHE_NAME = CACHE_PREFIX + 'shell-v4';
-const SHELL = ['/pwa/manifest.webmanifest', '/pwa/icon.svg'];
+const CACHE_NAME = CACHE_PREFIX + 'shell-v5';
+const SHELL = ['/pwa/manifest.webmanifest', '/pwa/icon.svg', '/pwa/icon-192.png', '/pwa/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
