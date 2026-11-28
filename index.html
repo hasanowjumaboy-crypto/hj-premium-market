@@ -741,7 +741,7 @@ start();
   function syncInstallVisibility(){
     banner.hidden=isInstalledApp||document.body.dataset.shopView!=='home';
     const profileButton=document.getElementById('installShopApp');
-    if(profileButton)profileButton.hidden=isInstalledApp;
+    if(profileButton)profileButton.hidden=false;
   }
   function openInstallLink(){
     if(isIOS){
