@@ -1646,6 +1646,7 @@ admin.delete('/reviews/:id', (req, res) => {
 
 app.use('/api/admin', admin);
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
+app.use('/downloads', express.static(path.join(__dirname, 'downloads'), { maxAge: '1h', index: false }));
 
 // PWA: manifest, service worker и иконка для установки магазина на устройство.
 const PWA_DIR = path.join(__dirname, 'pwa');
