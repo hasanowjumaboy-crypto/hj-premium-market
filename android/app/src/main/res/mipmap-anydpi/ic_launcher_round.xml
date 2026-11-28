@@ -1,25 +1,14 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#101827" android:pathData="M18,4 H90 Q104,4 104,18 V90 Q104,104 90,104 H18 Q4,104 4,90 V18 Q4,4 18,4 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#B77B25" android:strokeWidth="3"
-        android:pathData="M18,5 H90 Q103,5 103,18 V90 Q103,103 90,103 H18 Q5,103 5,90 V18 Q5,5 18,5 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#F4D27D" android:strokeWidth="1.5"
-        android:pathData="M19,9 H89 Q99,9 99,19 V89 Q99,99 89,99 H19 Q9,99 9,89 V19 Q9,9 19,9 Z"/>
-    <!-- Compact raised HJ monogram -->
-    <path android:fillColor="#00000000" android:strokeColor="#75460F" android:strokeWidth="9" android:strokeLineCap="square" android:strokeLineJoin="round"
-        android:pathData="M24,25 V63 M24,44 H43 M43,25 V63 M82,25 V49 Q82,65 68,65 Q59,65 55,57"/>
-    <path android:fillColor="#00000000" android:strokeColor="#FFE7A0" android:strokeWidth="6" android:strokeLineCap="square" android:strokeLineJoin="round"
-        android:pathData="M22,23 V61 M22,42 H41 M41,23 V61 M80,23 V47 Q80,63 66,63 Q57,63 53,55"/>
-    <path android:fillColor="#00000000" android:strokeColor="#D69A35" android:strokeWidth="1.8" android:strokeLineCap="square" android:strokeLineJoin="round"
-        android:pathData="M22,23 V61 M22,42 H41 M41,23 V61 M80,23 V47 Q80,63 66,63 Q57,63 53,55"/>
-    <!-- Shopping bag integrated in the space between H and J -->
-    <path android:fillColor="#101827" android:pathData="M42,48 H66 L64,73 Q64,76 61,76 H47 Q44,76 44,73 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#8C5D1C" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M47,52 V47 Q47,39 54,39 Q61,39 61,47 V52 M42,50 H66 L64,73 Q64,76 61,76 H47 Q44,76 44,73 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#F4D27D" android:strokeWidth="2.8" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M47,52 V47 Q47,39 54,39 Q61,39 61,47 V52 M42,50 H66 L64,73 Q64,76 61,76 H47 Q44,76 44,73 Z"/>
-    <path android:fillColor="#D99D3B" android:pathData="M49,57 H52 V69 H49 Z M56,57 H59 V69 H56 Z"/>
-    <!-- Small MARKET wordmark -->
-    <path android:fillColor="#FFE5A0" android:pathData="M27,91 V83 L32,89 L37,83 V91 H35 V87 L32,91 L29,87 V91 Z M40,91 L43,83 H45 L48,91 H46 L45.4,89 H42.6 L42,91 Z M43.2,87.5 H44.8 L44,85.5 Z M51,91 V83 H55 Q58,83 58,86 Q58,88 56,89 L59,91 H56.5 L54,89 H53 V91 Z M53,85 V87 H55 Q56,87 56,86 Q56,85 55,85 Z M61,83 H68 V85 H63 V86 H67 V88 H63 V89 H68 V91 H61 Z M70,83 H77 V85 H74.5 V91 H72.5 V85 H70 Z M79,83 H86 V85 H81 V86 H85 V88 H81 V89 H86 V91 H79 Z"/>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="512" android:viewportHeight="512">
+<path android:fillColor="#1246A0" android:pathData="M88 0H424Q512 0 512 88V424Q512 512 424 512H88Q0 512 0 424V88Q0 0 88 0Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M256 43 294 75 342 62 360 105 405 112 407 160 450 188 432 231 463 270 428 306 438 353 392 373 376 420 328 411 294 458 256 433 218 458 184 411 136 420 120 373 74 353 84 306 49 270 80 231 62 188 105 160 107 112 152 105 170 62 218 75Z"/>
+<path android:fillColor="#1246A0" android:pathData="M176 151 211 128 256 139 301 128 336 151 329 218 312 278 289 333 256 365 223 333 200 278 183 218Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M178 157 137 125 149 190 185 207Z M334 157 375 125 363 190 327 207Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M190 219 Q218 189 246 216 Q224 211 204 232Z M322 219 Q294 189 266 216 Q288 211 308 232Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M207 239 Q224 227 241 239 Q224 252 207 239Z M305 239 Q288 227 271 239 Q288 252 305 239Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M183 267 Q207 250 235 270 Q249 283 256 300 Q263 283 277 270 Q305 250 329 267 L316 306 Q295 329 256 328 Q217 329 196 306Z"/>
+<path android:fillColor="#1246A0" android:pathData="M239 284 Q256 272 273 284 Q269 301 256 303 Q243 301 239 284Z"/>
+<path android:fillColor="#FFFFFF" android:pathData="M256 163 242 190 256 184 270 190Z"/>
+<path android:fillColor="#1246A0" android:pathData="M224 234h1v1h-1z M288 234h1v1h-1z"/>
+<path android:fillColor="#1246A0" android:pathData="M205 286 174 278 174 284 205 292Z M207 300 174 302 174 308 207 306Z M307 286 338 278 338 284 307 292Z M305 300 338 302 338 308 305 306Z"/>
+<path android:fillColor="#1246A0" android:pathData="M148 225 112 242 145 259 151 252 130 243 153 237Z M364 225 400 242 367 259 361 252 382 243 359 237Z M151 315 119 340 161 345 165 337 140 335 157 326Z M361 315 393 340 351 345 347 337 372 335 355 326Z M205 380 188 412 225 398 225 390 205 400 215 382Z M307 380 324 412 287 398 287 390 307 400 297 382Z"/>
 </vector>
