@@ -725,6 +725,7 @@ start();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(error => console.warn('PWA service worker:', error)));
   }
+  const INSTALL_URL='https://hj-premium-market-production.up.railway.app/?utm_source=chatgpt.com';
   const banner=document.getElementById('pwa-install-banner');
   const action=document.getElementById('pwa-install-action');
   const hint=document.getElementById('pwa-install-hint');
@@ -735,117 +736,45 @@ start();
   const inTelegram=Boolean((telegramApp&&telegramApp.initData)||/Telegram/i.test(navigator.userAgent)||new URLSearchParams(location.search).has('tgWebAppPlatform'));
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const isAndroid=/Android/i.test(navigator.userAgent);
-  const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
-  const installed=()=>isStandalone();
-  const params=new URLSearchParams(location.search);
-  const cameFromTelegramInstall=params.get('pwa_install')==='1';
-  const launchChrome=params.get('launch_chrome')==='1';
-  const isChrome=/Chrome\/[0-9]+/i.test(navigator.userAgent)&&!/EdgA|OPR|YaBrowser|SamsungBrowser|UCBrowser/i.test(navigator.userAgent);
   let installPrompt=null;
-  let autoAttempted=false;
 
-
-  function hideInstallControls(){
-    banner.hidden=true;
+  // Keep install buttons visible even after the app has been installed.
+  function keepInstallControlsVisible(){
+    banner.hidden=false;
     const profileButton=document.getElementById('installShopApp');
-    if(profileButton)profileButton.hidden=true;
+    if(profileButton)profileButton.hidden=false;
   }
   function show(message,label){
-    if(installed()){hideInstallControls();return;}
     hint.textContent=message;
-    action.textContent=label||'Установить';
+    action.textContent=label||'Установить приложение';
     banner.hidden=false;
   }
-  function cleanInstallParameter(){
-    if(!params.has('pwa_install'))return;
-    params.delete('pwa_install');
-    const next=location.pathname+(params.toString()?'?'+params.toString():'')+location.hash;
-    history.replaceState(history.state,'',next);
-  }
-  function openInBrowser(){
-    const url=new URL(location.href);
-    url.searchParams.set('pwa_install','1');
-    url.searchParams.set('from_telegram','1');
-    const target=url.toString();
-    // Only use Telegram's WebApp external-link API when this is a real,
-    // initialized Mini App session. A merely-present WebApp stub can no-op.
-    if(telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
+  function openInstallLink(){
+    if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
       try{
-        telegramApp.openLink(target,{try_instant_view:false});
-        hint.textContent='Открываем магазин во внешнем браузере. Если Telegram не переключился, откройте меню ⋮ и выберите «Открыть в браузере».';
+        telegramApp.openLink(INSTALL_URL,{try_instant_view:false});
+        hint.textContent='Открываем магазин по ссылке для установки.';
         return;
       }catch(error){console.warn('Telegram openLink failed:',error);}
     }
-    // Fall back to a real HTTPS anchor opened directly from the user's tap.
-    // Avoid intent:// and custom schemes: Telegram WebViews may reject them.
     const link=document.createElement('a');
-    link.href=target;
+    link.href=INSTALL_URL;
     link.target='_blank';
     link.rel='noopener noreferrer';
     link.style.display='none';
     document.body.appendChild(link);
-    try{link.click();}catch(error){console.warn('External browser link failed:',error);}
+    link.click();
     link.remove();
-    hint.textContent='Если магазин остался в Telegram, нажмите ⋮ вверху справа → «Открыть в браузере», затем выберите Google Chrome. После открытия Chrome подтвердите «Установить приложение».';
-    action.textContent='Открыть в браузере';
-  }
-  async function requestInstall(fromUser){
-    if(installed()){hideInstallControls();return;}
-    if(isIOS){
-      alert('На iPhone откройте магазин в Safari. Нажмите «Поделиться» → «На экран Домой» → «Добавить».');
-      return;
-    }
-    if(isAndroid&&!isChrome){show('Откройте магазин в Chrome. В меню браузера выберите «Открыть в Chrome», затем установите приложение через меню Chrome (⋮).','Как открыть в Chrome');if(fromUser)alert('Откройте магазин в Chrome. Если доступен выбор браузера, выберите Chrome.');return;}
-    if(!installPrompt){
-      show(isAndroid?'Если окно установки не появилось, откройте меню Chrome (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».','Установить');
-      if(fromUser)alert(isAndroid?'Если системное окно не появилось, откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».');
-      return;
-    }
-    const promptEvent=installPrompt;
-    try{
-      const promptResult=promptEvent.prompt();
-      installPrompt=null;
-      window.hjInstallPrompt=null;
-      await promptResult;
-      const choice=await promptEvent.userChoice;
-      if(choice&&choice.outcome==='accepted'){
-        hint.textContent='Установка приложения началась…';
-        action.textContent='Установка…';
-        banner.hidden=true;
-      }else{
-        show('Установка не завершена. Нажмите «Установить» ещё раз, если браузер предлагает установку, или откройте меню браузера.','Установить');
-      }
-    }catch(error){
-      installPrompt=promptEvent;
-      window.hjInstallPrompt=promptEvent;
-      show('Браузер не открыл установку автоматически. Нажмите «Установить» ещё раз.','Установить');
-    }
+    hint.textContent='Откройте магазин в браузере и завершите установку.';
   }
 
-  if(installed())hideInstallControls();
-  else if(inTelegram){
-    show(isIOS?'Откройте магазин в Safari, чтобы добавить его на экран «Домой».':'Нажмите, чтобы открыть магазин во внешнем браузере и установить его на телефон.','Открыть в браузере');
-    action.addEventListener('click',openInBrowser);
-  }else if(isIOS){
-    show('На iPhone: откройте магазин в Safari → «Поделиться» → «На экран Домой» → «Добавить».','Как установить');
-    action.addEventListener('click',()=>requestInstall(true));
-  }else{
-    show('Установите HJ PREMIUM MARKET на главный экран телефона.','Установить');
-    action.addEventListener('click',()=>requestInstall(true));
-  }
+  show(isIOS?'Откройте ссылку в Safari, затем нажмите «Поделиться» → «На экран Домой».':'Нажмите, чтобы открыть магазин по ссылке установки.','Установить приложение');
+  action.addEventListener('click',openInstallLink);
 
   window.addEventListener('beforeinstallprompt',event=>{
     event.preventDefault();
     installPrompt=event;
     window.hjInstallPrompt=event;
-    if(installed()){hideInstallControls();return;}
-    if(!inTelegram){
-      show('Нажмите «Установить», чтобы добавить магазин на главный экран телефона.','Установить');
-      if(cameFromTelegramInstall&&!autoAttempted){
-        autoAttempted=true;
-        setTimeout(()=>requestInstall(false),250);
-      }
-    }
   });
 
   close.addEventListener('click',()=>{
@@ -853,28 +782,19 @@ start();
     sessionStorage.setItem('hj_pwa_banner_closed','1');
   });
 
-  window.addEventListener('appinstalled',()=>{
-    installPrompt=null;
-    window.hjInstallPrompt=null;
-    hideInstallControls();
-  });
-
   document.addEventListener('click',event=>{
     const button=event.target.closest('#installShopApp');
     if(!button)return;
     event.preventDefault();
-    if(installed()){hideInstallControls();return;}
-    if(inTelegram){openInBrowser();return;}
-    if(isAndroid&&!isChrome){openInBrowser();return;}
-    requestInstall(true);
+    openInstallLink();
   });
 
+  // Re-show the profile install control if the shop UI rebuilds it.
   const observer=new MutationObserver(()=>{
-    if(installed())hideInstallControls();
+    const profileButton=document.getElementById('installShopApp');
+    if(profileButton)profileButton.hidden=false;
   });
   observer.observe(document.body,{childList:true,subtree:true});
-  document.addEventListener('visibilitychange',()=>{if(installed())hideInstallControls();});
-  cleanInstallParameter();
 })();
 </script>
 </body></html>
