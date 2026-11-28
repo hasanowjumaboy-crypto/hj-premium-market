@@ -773,38 +773,91 @@ start();
 <script>
 (() => {
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    let registrationRef = null;
     let reloadingForUpdate = false;
+    let currentBuildVersion = '';
+    const VERSION_KEY = 'hj_market_build_version';
+    const checkVersion = async () => {
+      try {
+        const response = await fetch('/api/version?check=' + Date.now(), { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data.version) return;
+        const installedVersion = localStorage.getItem(VERSION_KEY);
+        if (!installedVersion) {
+          localStorage.setItem(VERSION_KEY, data.version);
+          return;
+        }
+        if (installedVersion !== data.version) {
+          currentBuildVersion = data.version;
+          showUpdateNotice();
+        }
+      } catch (error) {
+        // Version check is best-effort; the shop remains usable offline.
+      }
+    };
+    const showUpdateNotice = () => {
+      if (document.getElementById('hj-app-update-notice')) return;
+      const notice = document.createElement('section');
+      notice.id = 'hj-app-update-notice';
+      notice.style.cssText = 'position:fixed;z-index:1000;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-width:520px;margin:auto;padding:16px;background:#171d2b;color:#fff;border:1px solid #c69a4b;border-radius:16px;box-shadow:0 12px 36px #0005;font:14px system-ui,-apple-system,Segoe UI,Arial';
+      notice.innerHTML = '<div style="font-size:16px;font-weight:900;margin-bottom:5px">Вышло обновление HJ Premium Market</div><div style="color:#d6dbe4;font-size:12px;line-height:1.4;margin-bottom:12px">Доступна новая версия с обновлениями дизайна и функций. Нажмите, чтобы обновить приложение. Ваш аккаунт, корзина и заказы сохранятся.</div><button type="button" id="hj-app-update-button" style="width:100%;border:0;border-radius:10px;padding:12px;background:#c69a4b;color:#171717;font-weight:900;font-size:14px">Обновить приложение</button>';
+      document.body.appendChild(notice);
+      const button = document.getElementById('hj-app-update-button');
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Обновляем…';
+        try {
+          const response = await fetch('/api/version?check=' + Date.now(), { cache: 'no-store' });
+          if (!response.ok) throw new Error('Не удалось проверить новую версию');
+          const data = await response.json();
+          if (data.version) currentBuildVersion = data.version;
+          if (registrationRef) {
+            try {
+              await registrationRef.update();
+              if (registrationRef.waiting) registrationRef.waiting.postMessage({ type: 'SKIP_WAITING' });
+            } catch (error) {}
+          }
+          if (currentBuildVersion) localStorage.setItem(VERSION_KEY, currentBuildVersion);
+          try { sessionStorage.setItem('hj_pwa_update_scroll', String(window.scrollY)); } catch {}
+          reloadingForUpdate = true;
+          window.location.reload();
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Повторить обновление';
+          const message = notice.querySelector('div:nth-child(2)');
+          if (message) message.textContent = 'Не удалось загрузить обновление. Проверьте интернет и нажмите «Повторить обновление».';
+        }
+      });
+    };
     const registerUpdates = async () => {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
-        const check = () => registration.update().catch(() => {});
-        check();
-        window.addEventListener('focus', check);
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
-        setInterval(check, 60 * 60 * 1000);
-        registration.addEventListener('updatefound', () => {
-          const worker = registration.installing;
-          if (!worker) return;
-          worker.addEventListener('statechange', () => {
-            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-              worker.postMessage({ type: 'SKIP_WAITING' });
-            }
-          });
+        registrationRef = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+        const checkWorker = () => registrationRef.update().catch(() => {});
+        checkWorker();
+        window.addEventListener('focus', () => { checkWorker(); checkVersion(); });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') { checkWorker(); checkVersion(); }
+        });
+        setInterval(checkWorker, 60 * 60 * 1000);
+        setInterval(checkVersion, 60 * 1000);
+        registrationRef.addEventListener('updatefound', () => {
+          // Keep the new worker waiting until the customer presses Update.
         });
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (reloadingForUpdate) return;
+          if (!reloadingForUpdate) return;
           reloadingForUpdate = true;
-          // Keep the current page position across a safe one-time refresh.
           try { sessionStorage.setItem('hj_pwa_update_scroll', String(window.scrollY)); } catch {}
           window.location.reload();
         });
-        if (registration.waiting && navigator.serviceWorker.controller) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        if (registrationRef.waiting) {
+          // The explicit Update button will activate the waiting worker.
         }
       } catch (error) {
         console.warn('PWA service worker update:', error);
       }
     };
+    checkVersion();
     window.addEventListener('load', registerUpdates, { once: true });
     try {
       const savedScroll = sessionStorage.getItem('hj_pwa_update_scroll');
