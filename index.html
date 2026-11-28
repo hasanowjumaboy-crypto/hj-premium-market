@@ -199,6 +199,7 @@ function profileView(){
 }
 function render(){
  const root=$('#root');if(location.pathname==='/admin'){renderAdmin(true);return}
+ document.body.dataset.shopView=state.view;
  let content=state.view==='cart'?cartView():state.view==='checkout'?checkoutView():state.view==='profile'?profileView():state.view==='catalog'?catalogView():state.view==='category'?categoryView():state.view==='sale'?saleView():state.view==='product'?productDetailView():state.view==='specs'?productSpecsView():homeView();
  const cartEntries=(state.view==='cart'||state.view==='checkout')?Object.entries(state.cart).filter(([id,q])=>q>0&&state.selected.has(id)&&state.products.some(p=>String(p.id)===String(id))):[];const cartCheckout=cartEntries.length?(()=>{const qty=cartEntries.reduce((n,[,q])=>n+Number(q||0),0);const sum=cartEntries.reduce((n,[id,q])=>{const p=state.products.find(x=>String(x.id)===String(id));return n+(p?Number(p.price)*Number(q):0)},0);return `<div class="cart-checkout-dock"><button type="button" id="checkout" ${sum<=0?'disabled':''}><span>${state.view==='checkout'?'Подтвердить заказ · ':'Оформление заказа · '}${qty} шт.</span><b>${money(sum)}</b></button></div>`})():'';root.innerHTML=`<div class="app">${content}</div>${state.view==='product'?(()=>{const p=state.products.find(x=>String(x.id)===String(state.detailProductId));return p?`<div class="detail-buybar"><button type="button" data-add="${esc(p.id)}" ${Number(p.stock)<=0?'disabled':''}>В корзину</button></div>`:''})():''}${cartCheckout}${nav()}`;
  bindCommon();bindSaleCarousel();bindCardGalleries();bindProductDetail();
@@ -725,76 +726,46 @@ start();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(error => console.warn('PWA service worker:', error)));
   }
-  const INSTALL_URL='https://hj-premium-market-production.up.railway.app/?utm_source=chatgpt.com';
+  const APK_URL='https://hj-premium-market-production.up.railway.app/downloads/HJ-PREMIUM-MARKET.apk';
   const banner=document.getElementById('pwa-install-banner');
   const action=document.getElementById('pwa-install-action');
   const hint=document.getElementById('pwa-install-hint');
   const close=document.getElementById('pwa-install-close');
   if(!banner||!action||!hint||!close)return;
-
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
   const inTelegram=Boolean((telegramApp&&telegramApp.initData)||/Telegram/i.test(navigator.userAgent)||new URLSearchParams(location.search).has('tgWebAppPlatform'));
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  const isAndroid=/Android/i.test(navigator.userAgent);
-  let installPrompt=null;
-
-  // Keep install buttons visible even after the app has been installed.
-  function keepInstallControlsVisible(){
-    banner.hidden=false;
+  function syncInstallVisibility(){
+    banner.hidden=document.body.dataset.shopView!=='home';
     const profileButton=document.getElementById('installShopApp');
     if(profileButton)profileButton.hidden=false;
   }
-  function show(message,label){
-    hint.textContent=message;
-    action.textContent=label||'Установить приложение';
-    banner.hidden=false;
-  }
   function openInstallLink(){
-    if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
-      try{
-        telegramApp.openLink(INSTALL_URL,{try_instant_view:false});
-        hint.textContent='Открываем магазин по ссылке для установки.';
-        return;
-      }catch(error){console.warn('Telegram openLink failed:',error);}
+    if(isIOS){
+      hint.textContent='APK-файл предназначен для Android. На iPhone установку APK выполнить нельзя.';
+      return;
     }
-    const link=document.createElement('a');
-    link.href=INSTALL_URL;
-    link.target='_blank';
-    link.rel='noopener noreferrer';
-    link.style.display='none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    hint.textContent='Откройте магазин в браузере и завершите установку.';
+    if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
+      try{telegramApp.openLink(APK_URL,{try_instant_view:false});hint.textContent='Открываем загрузку приложения Android.';return;}
+      catch(error){console.warn('Telegram openLink failed:',error);}
+    }
+    window.location.href=APK_URL;
+    hint.textContent='Скачайте APK и откройте файл, чтобы установить приложение.';
   }
-
-  show(isIOS?'Откройте ссылку в Safari, затем нажмите «Поделиться» → «На экран Домой».':'Нажмите, чтобы открыть магазин по ссылке установки.','Установить приложение');
+  action.textContent='Скачать приложение';
+  hint.textContent=isIOS?'APK-файл предназначен для Android.':'Скачайте приложение HJ PREMIUM MARKET для Android.';
+  syncInstallVisibility();
   action.addEventListener('click',openInstallLink);
-
-  window.addEventListener('beforeinstallprompt',event=>{
-    event.preventDefault();
-    installPrompt=event;
-    window.hjInstallPrompt=event;
-  });
-
-  close.addEventListener('click',()=>{
-    banner.hidden=true;
-    sessionStorage.setItem('hj_pwa_banner_closed','1');
-  });
-
+  close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
   document.addEventListener('click',event=>{
     const button=event.target.closest('#installShopApp');
     if(!button)return;
     event.preventDefault();
     openInstallLink();
   });
+  const observer=new MutationObserver(syncInstallVisibility);
+  observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-shop-view']});
 
-  // Re-show the profile install control if the shop UI rebuilds it.
-  const observer=new MutationObserver(()=>{
-    const profileButton=document.getElementById('installShopApp');
-    if(profileButton)profileButton.hidden=false;
-  });
-  observer.observe(document.body,{childList:true,subtree:true});
 })();
 </script>
 </body></html>
