@@ -1,14 +1,22 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#000000" android:pathData="M0,0 H108 V108 H0 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#D6AE68" android:strokeWidth="3.2"
-        android:pathData="M18,31 H90 L84,94 Q83,99 78,99 H30 Q25,99 24,94 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#F4C86A" android:strokeWidth="4.5" android:strokeLineCap="round"
-        android:pathData="M36,32 V25 C36,7 72,7 72,25 V32"/>
-    <path android:fillColor="#F2CF7B" android:pathData="M29,42 H79 V48 H29 Z"/>
-    <path android:fillColor="#FFE39A" android:pathData="M31,51 H38 V72 H31 Z M38,58 H49 V64 H38 Z M49,51 H56 V72 H49 Z M66,51 H73 V66 Q73,73 66,73 Q59,73 57,67 L63,64 Q64,68 67,67 Z"/>
-    <path android:fillColor="#00000000" android:strokeColor="#E7B84F" android:strokeWidth="3.2" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M35,79 H43 L48,91 H76 L82,81 H47"/>
-    <path android:fillColor="#E7B84F" android:pathData="M50,94 A3.5,3.5 0,1 0,57,94 A3.5,3.5 0,1 0,50,94 M70,94 A3.5,3.5 0,1 0,77,94 A3.5,3.5 0,1 0,70,94"/>
+    <path android:fillColor="#101522" android:pathData="M54,4 A50,50 0,1 0,54 104 A50,50 0,1 0,54 4"/>
+    <path android:fillColor="#00000000" android:strokeColor="#8C5D1C" android:strokeWidth="6"
+        android:pathData="M54,7 A47,47 0,1 0,54 101 A47,47 0,1 0,54 7"/>
+    <path android:fillColor="#00000000" android:strokeColor="#F4D27D" android:strokeWidth="2"
+        android:pathData="M54,11 A43,43 0,1 0,54 97 A43,43 0,1 0,54 11"/>
+    <!-- Deep offset gives the HJ monogram a raised 3D edge -->
+    <path android:fillColor="#00000000" android:strokeColor="#70430F" android:strokeWidth="9" android:strokeLineCap="square" android:strokeLineJoin="round"
+        android:pathData="M25,28 V59 M25,43 H45 M45,28 V59 M78,28 V49 Q78,61 65,61 Q55,61 51,53"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FFE7A0" android:strokeWidth="6" android:strokeLineCap="square" android:strokeLineJoin="round"
+        android:pathData="M23,26 V57 M23,41 H43 M43,26 V57 M76,26 V47 Q76,59 63,59 Q53,59 49,51"/>
+    <path android:fillColor="#00000000" android:strokeColor="#D69A35" android:strokeWidth="2" android:strokeLineCap="square" android:strokeLineJoin="round"
+        android:pathData="M23,26 V57 M23,41 H43 M43,26 V57 M76,26 V47 Q76,59 63,59 Q53,59 49,51"/>
+    <!-- Shopping basket -->
+    <path android:fillColor="#00000000" android:strokeColor="#F2C96D" android:strokeWidth="3.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M35,68 H73 L69,85 Q68,88 65,88 H43 Q40,88 39,85 Z M43,68 L48,58 M65,68 L60,58"/>
+    <path android:fillColor="#D99D3B" android:pathData="M43,72 H47 V83 H43 Z M52,72 H56 V83 H52 Z M61,72 H65 V83 H61 Z"/>
+    <!-- MARKET lettering -->
+    <path android:fillColor="#FFE5A0" android:pathData="M31,94 V89 L34,93 L37,89 V94 H36 V91 L34,94 L32,91 V94 Z M39,94 L41,89 H42 L44,94 H43 L42.5,93 H40.5 L40,94 Z M41,92 H42 L41.5,90.5 Z M46,94 V89 H48.5 Q50,89 50,90.5 Q50,91.5 49,92 L50.5,94 H49 L47.7,92 H47 V94 Z M47,90 V91 H48.4 Q49,91 49,90.5 Q49,90 48.4,90 Z M52,89 H56 V90 H53 V91 H55.5 V92 H53 V93 H56 V94 H52 Z M58,89 H62 V90 H60.5 V94 H59.5 V90 H58 Z M64,89 H68 V90 H65 V91 H67.5 V92 H65 V93 H68 V94 H64 Z M70,89 H71 L73,94 H72 L71.5,93 H69.5 L69,94 H68 Z M70,92 H71.2 L70.6,90.5 Z M75,89 H79 V90 H77.5 V94 H76.5 V90 H75 Z"/>
 </vector>
