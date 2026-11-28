@@ -8,7 +8,6 @@ self.addEventListener('install', event => {
     await Promise.all(SHELL.map(async path => {
       try { const response = await fetch(path, { cache: 'reload' }); if (response.ok) await cache.put(path, response); } catch {}
     }));
-    await self.skipWaiting();
   })());
 });
 
