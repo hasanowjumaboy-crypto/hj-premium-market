@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+const APP_BUILD_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_DEPLOYMENT_ID || '1.0.0';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const BOT_API_SECRET = process.env.BOT_API_SECRET || '';
 const BOT_OWNER_ID = String(process.env.BOT_OWNER_ID || '').trim();
@@ -1761,6 +1762,12 @@ admin.delete('/reviews/:id', (req, res) => {
 });
 
 app.use('/api/admin', admin);
+
+// Public build version lets installed web apps offer an explicit update prompt.
+app.get('/api/version', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json({ version: APP_BUILD_VERSION, app: 'HJ PREMIUM MARKET' });
+});
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d', immutable: true, index: false }));
 app.get('/downloads/HJ-PREMIUM-MARKET.apk', (req, res) => {
   res.download(path.join(__dirname, 'downloads', 'HJ-PREMIUM-MARKET.apk'), 'HJ-PREMIUM-MARKET.apk');
