@@ -742,18 +742,25 @@ start();
   }
   function openInstallLink(){
     if(isIOS){
-      hint.textContent='APK-файл предназначен для Android. На iPhone установку APK выполнить нельзя.';
+      hint.textContent='На iPhone APK не устанавливается. Откройте магазин в Safari и используйте «Поделиться» → «На экран Домой».';
       return;
     }
+    hint.textContent='Загружаем приложение. Когда загрузка закончится, нажмите «Открыть» в уведомлении браузера, затем «Установить». Android попросит подтвердить установку.';
     if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
-      try{telegramApp.openLink(APK_URL,{try_instant_view:false});hint.textContent='Открываем загрузку приложения Android.';return;}
+      try{telegramApp.openLink(APK_URL,{try_instant_view:false});return;}
       catch(error){console.warn('Telegram openLink failed:',error);}
     }
-    window.location.href=APK_URL;
-    hint.textContent='Скачайте APK и откройте файл, чтобы установить приложение.';
+    const link=document.createElement('a');
+    link.href=APK_URL;
+    link.target='_blank';
+    link.rel='noopener';
+    link.download='HJ-PREMIUM-MARKET.apk';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
-  action.textContent='Скачать приложение';
-  hint.textContent=isIOS?'APK-файл предназначен для Android.':'Скачайте приложение HJ PREMIUM MARKET для Android.';
+  action.textContent='Скачать и установить';
+  hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите кнопку: APK скачается. Затем откройте загрузку из уведомления и подтвердите установку Android.';
   syncInstallVisibility();
   action.addEventListener('click',openInstallLink);
   close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
