@@ -762,24 +762,15 @@ start();
     const next=location.pathname+(params.toString()?'?'+params.toString():'')+location.hash;
     history.replaceState(history.state,'',next);
   }
-  function openChrome(targetUrl){
-    const target=new URL(targetUrl||location.href);
-    target.searchParams.set('pwa_install','1');
-    target.searchParams.delete('launch_chrome');
-    const fallback=target.toString();
-    const intent='intent://'+target.host+target.pathname+target.search+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(fallback)+';end';
-    try{location.href=intent;}catch(error){location.href=fallback;}
-  }
   function openInBrowser(){
     const url=new URL(location.href);
     url.searchParams.set('pwa_install','1');
     url.searchParams.set('from_telegram','1');
     const target=url.toString();
-    // Android: launch Chrome directly through an Android intent.
-    // Do this before Telegram openLink, which may open only the default browser.
-    if(isAndroid){openChrome(target);return;}
+    // Use an HTTPS link through Telegram's supported external-browser API.
+    // Custom intent:// schemes are blocked by some Telegram Android WebViews.
     try{
-      if(telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
+      if(telegramApp&&typeof telegramApp.openLink==='function'){
         telegramApp.openLink(target,{try_instant_view:false});
         return;
       }
@@ -787,7 +778,7 @@ start();
     let opened=null;
     try{opened=window.open(target,'_blank');}catch(error){console.warn('External browser open failed:',error);}
     if(opened){try{opened.opener=null;}catch(error){}}
-    hint.textContent='Если браузер не открылся автоматически, откройте меню Telegram ⋮ → «Открыть в браузере».';
+    hint.textContent='Если браузер не открылся, нажмите ⋮ в Telegram и выберите «Открыть в браузере». Затем выберите Chrome.';
     action.textContent='Открыть в браузере';
   }
   async function requestInstall(fromUser){
@@ -796,7 +787,7 @@ start();
       alert('На iPhone откройте магазин в Safari. Нажмите «Поделиться» → «На экран Домой» → «Добавить».');
       return;
     }
-    if(isAndroid&&!isChrome){openChrome(location.href);return;}
+    if(isAndroid&&!isChrome){show('Откройте магазин в Chrome. В меню браузера выберите «Открыть в Chrome», затем установите приложение через меню Chrome (⋮).','Как открыть в Chrome');if(fromUser)alert('Откройте магазин в Chrome. Если доступен выбор браузера, выберите Chrome.');return;}
     if(!installPrompt){
       show(isAndroid?'Если окно установки не появилось, откройте меню Chrome (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».','Установить');
       if(fromUser)alert(isAndroid?'Если системное окно не появилось, откройте меню браузера (⋮) и выберите «Установить приложение» или «Добавить на главный экран».':'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».');
@@ -823,13 +814,6 @@ start();
     }
   }
 
-  if(launchChrome&&isAndroid&&!isChrome&&!inTelegram){
-    params.delete('launch_chrome');
-    const cleanTarget=new URL(location.href);
-    cleanTarget.searchParams.delete('launch_chrome');
-    openChrome(cleanTarget.toString());
-    return;
-  }
   if(installed())hideInstallControls();
   else if(inTelegram){
     show(isIOS?'Откройте магазин в Safari, чтобы добавить его на экран «Домой».':'Нажмите, чтобы открыть магазин во внешнем браузере и установить его на телефон.','Открыть в браузере');
@@ -873,7 +857,7 @@ start();
     event.preventDefault();
     if(installed()){hideInstallControls();return;}
     if(inTelegram){openInBrowser();return;}
-    if(isAndroid&&!isChrome){openChrome(location.href);return;}
+    if(isAndroid&&!isChrome){openInBrowser();return;}
     requestInstall(true);
   });
 
