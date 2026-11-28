@@ -270,7 +270,7 @@ function makeCustomerToken(telegramId) {
 
 function customerTokenUser(token) {
   const parts = String(token || '').split('.');
-  if (parts.length !== 4 || parts[0] !== 'customer' || !/^\\d{4,20}$/.test(parts[1])) return null;
+  if (parts.length !== 4 || parts[0] !== 'customer' || !/^\d{4,20}$/.test(parts[1])) return null;
   const payload = parts.slice(0, 3).join('.');
   const expected = Buffer.from(sign(payload));
   const received = Buffer.from(parts[3]);
