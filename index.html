@@ -733,16 +733,6 @@ start();
   const close=document.getElementById('pwa-install-close');
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  // The native Android wrapper adds this marker to its WebView user agent.
-  const isNativeAndroidApp=/HJPremiumMarketApp\\/1\\.0/i.test(navigator.userAgent);
-  const isInstalledPwa=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
-  const installStorageKey='hj_premium_market_installed_v1';
-  let installedMode=isNativeAndroidApp||isInstalledPwa;
-  try{
-    if(installedMode)localStorage.setItem(installStorageKey,'1');
-    else installedMode=localStorage.getItem(installStorageKey)==='1';
-  }catch(error){console.warn('Install state storage unavailable:',error);}
-
   function startApkDownload(){
     if(isIOS){
       if(hint)hint.textContent='На iPhone APK не устанавливается. Откройте магазин в Safari и выберите «Поделиться» → «На экран Домой».';
@@ -768,23 +758,16 @@ start();
   }
 
   function syncInstallVisibility(){
-    // Once the native app or installed PWA is opened, never show the home reminder again.
-    if(banner)banner.hidden=installedMode||document.body.dataset.shopView!=='home';
+    if(banner)banner.hidden=document.body.dataset.shopView!=='home';
     const profileButton=document.getElementById('installShopApp');
-    if(profileButton){profileButton.hidden=false;profileButton.disabled=false;}
+    if(profileButton)profileButton.hidden=false;
   }
   if(action){
     action.textContent='Скачать и установить';
     action.addEventListener('click',event=>{event.preventDefault();startApkDownload();});
   }
   if(hint)hint.textContent=isIOS?'На iPhone APK не устанавливается.':'Нажмите, чтобы скачать приложение для Android.';
-  if(close&&banner)close.addEventListener('click',()=>{banner.hidden=true;}); 
-  // PWA installation confirmation is available in supporting browsers.
-  window.addEventListener('appinstalled',()=>{
-    installedMode=true;
-    try{localStorage.setItem(installStorageKey,'1');}catch(error){}
-    if(banner)banner.hidden=true;
-  });
+  if(close&&banner)close.addEventListener('click',()=>{banner.hidden=true;sessionStorage.setItem('hj_apk_banner_closed','1');});
   // Delegated handler works even when the Profile page is rendered after page load.
   document.addEventListener('click',event=>{
     const button=event.target&&event.target.closest?event.target.closest('#installShopApp'):null;
