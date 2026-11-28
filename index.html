@@ -771,19 +771,7 @@ start();
     const button=event.target.closest('#installShopApp');
     if(!button)return;
     event.preventDefault();
-    if(isIOS){openInstallLink();return;}
-    if(isInstalledApp){
-      hint.textContent='HJ PREMIUM MARKET уже открыто в приложении.';
-      return;
-    }
-    const fallback=encodeURIComponent(APK_URL);
-    const intentUrl='intent://open#Intent;scheme=hjpremium;package=com.hj.premiummarket;S.browser_fallback_url='+fallback+';end';
-    hint.textContent='Открываем установленное приложение. Если оно ещё не установлено, начнётся загрузка APK.';
-    if(inTelegram&&telegramApp&&telegramApp.initData&&typeof telegramApp.openLink==='function'){
-      try{telegramApp.openLink(intentUrl,{try_instant_view:false});return;}
-      catch(error){console.warn('Telegram app-link failed:',error);}
-    }
-    window.location.href=intentUrl;
+    openInstallLink();
   });
   const observer=new MutationObserver(syncInstallVisibility);
   observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-shop-view']});
