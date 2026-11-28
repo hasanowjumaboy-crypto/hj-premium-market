@@ -772,7 +772,7 @@ start();
 </div>
 <script>
 (() => {
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  if (/^https?:$/.test(location.protocol)) {
     let registrationRef = null;
     let reloadingForUpdate = false;
     let currentBuildVersion = '';
