@@ -67,8 +67,14 @@ jobs:
           if git diff --cached --quiet; then
             echo "APK is already up to date"
           else
-            git -c user.name="github-actions[bot]" -c user.email="41898282+users.noreply.github.com" commit -m "Publish signed HJ PREMIUM MARKET Android APK"
             git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            # Avoid rebasing binary APK changes; rebase the worktree onto the latest main instead.
+            git reset --mixed origin/main
+            git add downloads/HJ-PREMIUM-MARKET.apk
+            if git diff --cached --quiet; then
+              echo "APK is already up to date on main"
+            else
+              git -c user.name="github-actions[bot]" -c user.email="41898282+users.noreply.github.com" commit -m "Publish signed HJ PREMIUM MARKET Android APK"
+              git push origin HEAD:main
+            fi
           fi
