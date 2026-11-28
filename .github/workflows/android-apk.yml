@@ -92,7 +92,7 @@ jobs:
             git fetch origin main
             # Avoid rebasing binary APK changes; rebase the worktree onto the latest main instead.
             git reset --mixed origin/main
-            git add downloads/HJ-PREMIUM-MARKET.apk
+            git add android/app/build.gradle downloads/HJ-PREMIUM-MARKET.apk
             if git diff --cached --quiet; then
               echo "APK is already up to date on main"
             else
