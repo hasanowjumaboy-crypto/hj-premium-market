@@ -48,6 +48,23 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.p12
           keytool -list -keystore android/app/release-keystore.p12 -storetype PKCS12 -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
 
+      - name: Increment Android release version
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          p = pathlib.Path('android/app/build.gradle')
+          s = p.read_text()
+          code = re.search(r'versionCode\s+(\d+)', s)
+          name = re.search(r"versionName\s+'(\d+)\.(\d+)\.(\d+)'", s)
+          if not code or not name:
+              raise SystemExit('Android versionCode/versionName not found')
+          s = re.sub(r'versionCode\s+\d+', 'versionCode ' + str(int(code.group(1)) + 1), s, count=1)
+          next_name = name.group(1) + '.' + name.group(2) + '.' + str(int(name.group(3)) + 1)
+          s = re.sub(r"versionName\s+'[^']+'", "versionName '" + next_name + "'", s, count=1)
+          p.write_text(s)
+          print('Building Android ' + next_name + ' (versionCode ' + str(int(code.group(1)) + 1) + ')')
+          PY
+
       - name: Build signed release APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -68,7 +85,7 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk downloads/HJ-PREMIUM-MARKET.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/HJ-PREMIUM-MARKET.apk
+          git add android/app/build.gradle downloads/HJ-PREMIUM-MARKET.apk
           if git diff --cached --quiet; then
             echo "APK is already up to date"
           else
@@ -79,7 +96,7 @@ jobs:
             if git diff --cached --quiet; then
               echo "APK is already up to date on main"
             else
-              git -c user.name="github-actions[bot]" -c user.email="41898282+users.noreply.github.com" commit -m "Publish signed HJ PREMIUM MARKET Android APK"
+              git -c user.name="github-actions[bot]" -c user.email="41898282+users.noreply.github.com" commit -m "Release signed HJ PREMIUM MARKET Android APK [skip ci]"
               git push origin HEAD:main
             fi
           fi
