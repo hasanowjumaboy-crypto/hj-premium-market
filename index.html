@@ -5,6 +5,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="HJ Market">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="manifest" href="/pwa/manifest.webmanifest">
 <link rel="icon" href="/pwa/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/pwa/icon.svg">
@@ -731,7 +732,7 @@ start();
   if(!banner||!action||!hint||!close)return;
 
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
-  const inTelegram=Boolean(telegramApp&&telegramApp.initData);
+  const inTelegram=Boolean((telegramApp&&telegramApp.initData)||/Telegram/i.test(navigator.userAgent)||new URLSearchParams(location.search).has('tgWebAppPlatform'));
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const isAndroid=/Android/i.test(navigator.userAgent);
   const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
@@ -763,8 +764,19 @@ start();
   function openInBrowser(){
     const url=new URL(location.href);
     url.searchParams.set('pwa_install','1');
-    if(telegramApp&&typeof telegramApp.openLink==='function')telegramApp.openLink(url.toString());
-    else window.open(url.toString(),'_blank','noopener');
+    url.searchParams.set('from_telegram','1');
+    const target=url.toString();
+    try{
+      if(telegramApp&&typeof telegramApp.openLink==='function'){
+        telegramApp.openLink(target,{try_instant_view:false});
+        return;
+      }
+    }catch(error){console.warn('Telegram openLink failed:',error);}
+    const link=document.createElement('a');
+    link.href=target;link.target='_blank';link.rel='noopener noreferrer';
+    link.style.display='none';document.body.appendChild(link);link.click();link.remove();
+    hint.textContent='Если браузер не открылся, нажмите меню Telegram ⋮ и выберите «Открыть в браузере». Затем нажмите «Установить».',
+    action.textContent='Открыть в браузере';
   }
   async function requestInstall(fromUser){
     if(installed()){hideInstallControls();return;}
@@ -800,7 +812,7 @@ start();
 
   if(installed())hideInstallControls();
   else if(inTelegram){
-    show(isIOS?'Откройте магазин в Safari, чтобы добавить его на экран «Домой».':'Нажмите, чтобы открыть магазин в браузере и установить его на телефон.','Открыть в браузере');
+    show(isIOS?'Откройте магазин в Safari, чтобы добавить его на экран «Домой».':'Нажмите, чтобы открыть магазин во внешнем браузере и установить его на телефон.','Открыть в браузере');
     action.addEventListener('click',openInBrowser);
   }else if(isIOS){
     show('На iPhone: откройте магазин в Safari → «Поделиться» → «На экран Домой» → «Добавить».','Как установить');
