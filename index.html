@@ -735,10 +735,13 @@ start();
   const telegramApp=window.Telegram&&window.Telegram.WebApp;
   const inTelegram=Boolean((telegramApp&&telegramApp.initData)||/Telegram/i.test(navigator.userAgent)||new URLSearchParams(location.search).has('tgWebAppPlatform'));
   const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const isInstalledApp=/HJPremiumMarketApp\\/1\\.0/i.test(navigator.userAgent)||
+    (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||
+    window.navigator.standalone===true;
   function syncInstallVisibility(){
-    banner.hidden=document.body.dataset.shopView!=='home';
+    banner.hidden=isInstalledApp||document.body.dataset.shopView!=='home';
     const profileButton=document.getElementById('installShopApp');
-    if(profileButton)profileButton.hidden=false;
+    if(profileButton)profileButton.hidden=isInstalledApp;
   }
   function openInstallLink(){
     if(isIOS){
